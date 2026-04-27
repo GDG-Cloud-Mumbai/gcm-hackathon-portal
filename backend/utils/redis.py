@@ -14,8 +14,8 @@ def _redis_url() -> str:
 
 
 @lru_cache(maxsize=1)
-def get_redis_client() -> Redis[Any]:
-    return cast(Redis[Any], Redis.from_url(_redis_url(), decode_responses=True, health_check_interval=30))
+def get_redis_client():
+    return Redis.from_url(_redis_url(), decode_responses=True, health_check_interval=30)
 
 
 def _otp_challenge_key(email: str) -> str:

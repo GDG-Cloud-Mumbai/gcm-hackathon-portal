@@ -1,10 +1,10 @@
 import hashlib
-import importlib
 import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import Any
 
+import jwt as pyjwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
@@ -19,8 +19,6 @@ from utils.redis import (
     increment_otp_attempt_count,
     store_otp_challenge,
 )
-
-jwt = cast(Any, importlib.import_module("jwt"))
 
 MONGODB_URI = require_env("MONGODB_URI")
 MONGODB_DB_NAME = ENV.get("MONGODB_DB_NAME", "hackathon_portal").strip()
@@ -108,7 +106,7 @@ def _issue_access_token(email: str) -> str:
         "iss": JWT_ISSUER,
         "aud": JWT_AUDIENCE,
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
 def _client_ip(request: Request) -> str:
@@ -140,7 +138,7 @@ def get_current_user(
     db: Database[Any] = request.app.state.db
 
     try:
-        payload = jwt.decode(
+        payload = pyjwt.decode(
             credentials.credentials,
             JWT_SECRET,
             algorithms=["HS256"],
@@ -148,7 +146,7 @@ def get_current_user(
             issuer=JWT_ISSUER,
             options={"require": ["sub", "exp", "iat", "aud", "iss"]},
         )
-    except jwt.InvalidTokenError as exc:
+    except pyjwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     email = payload.get("sub")

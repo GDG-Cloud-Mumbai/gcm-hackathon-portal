@@ -1,6 +1,6 @@
 @baseUrl = http://localhost:8888
-@email = test@example.com
-@otp = 000000
+@email = test@manan.cloud
+@otp = 620968
 @accessToken = paste_jwt_here
 
 ### Root health
