@@ -1,0 +1,7 @@
+@baseUrl = http://localhost:8888
+
+### API root
+GET {{baseUrl}}/
+
+### Auth me without token (should return 401)
+GET {{baseUrl}}/auth/me
