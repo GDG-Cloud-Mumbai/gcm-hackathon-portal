@@ -1,13 +1,10 @@
 from functools import lru_cache
-from typing import Any, cast
-
 from redis import Redis
-
-from utils.env import ENV
+from utils.env import get_env
 
 
 def _redis_url() -> str:
-    redis_url = ENV.get("REDIS_URL", "redis://localhost:6379/0").strip()
+    redis_url = get_env("REDIS_URL", "redis://localhost:6379/0").strip()
     if not redis_url:
         raise RuntimeError("REDIS_URL is required")
     return redis_url

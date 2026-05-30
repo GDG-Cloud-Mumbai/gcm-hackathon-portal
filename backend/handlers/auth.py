@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import jwt as pyjwt
+import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
@@ -20,14 +20,6 @@ from utils.redis import (
     store_otp_challenge,
 )
 
-MONGODB_URI = require_env("MONGODB_URI")
-MONGODB_DB_NAME = ENV.get("MONGODB_DB_NAME", "hackathon_portal").strip()
-MONGODB_MAX_POOL_SIZE = get_int("MONGODB_MAX_POOL_SIZE", 30)
-MONGODB_MIN_POOL_SIZE = get_int("MONGODB_MIN_POOL_SIZE", 5)
-MONGODB_MAX_IDLE_MS = get_int("MONGODB_MAX_IDLE_MS", 300000)
-MONGODB_CONNECT_TIMEOUT_MS = get_int("MONGODB_CONNECT_TIMEOUT_MS", 5000)
-MONGODB_SOCKET_TIMEOUT_MS = get_int("MONGODB_SOCKET_TIMEOUT_MS", 30000)
-MONGODB_SERVER_SELECTION_TIMEOUT_MS = get_int("MONGODB_SERVER_SELECTION_TIMEOUT_MS", 5000)
 JWT_SECRET = require_env("JWT_SECRET")
 JWT_ISSUER = ENV.get("JWT_ISSUER", "gcm-hackathon-portal").strip()
 JWT_AUDIENCE = ENV.get("JWT_AUDIENCE", "gcm-hackathon-users").strip()
@@ -106,7 +98,7 @@ def _issue_access_token(email: str) -> str:
         "iss": JWT_ISSUER,
         "aud": JWT_AUDIENCE,
     }
-    return pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
 def _client_ip(request: Request) -> str:
@@ -138,7 +130,7 @@ def get_current_user(
     db: Database[Any] = request.app.state.db
 
     try:
-        payload = pyjwt.decode(
+        payload = jwt.decode(
             credentials.credentials,
             JWT_SECRET,
             algorithms=["HS256"],
@@ -146,7 +138,7 @@ def get_current_user(
             issuer=JWT_ISSUER,
             options={"require": ["sub", "exp", "iat", "aud", "iss"]},
         )
-    except pyjwt.PyJWTError as exc:
+    except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     email = payload.get("sub")
