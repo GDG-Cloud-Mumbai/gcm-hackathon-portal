@@ -6,7 +6,6 @@ from typing import Any
 from pymongo.database import Database
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
 
 from middlewares.auth import get_current_user
