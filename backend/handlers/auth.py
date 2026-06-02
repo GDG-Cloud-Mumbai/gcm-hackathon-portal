@@ -3,22 +3,24 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
-
+from pymongo.database import Database
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
-from pymongo.database import Database
 
 from utils.env import ENV, get_int, require_env
 from utils.email import send_otp_email
-from utils.redis import (
+from utils.auth import (
     consume_otp_request_slot,
     delete_otp_challenge,
     fetch_otp_challenge,
     increment_otp_attempt_count,
     store_otp_challenge,
 )
+from utils.db import get_db
+
+from models.user import UserPublic
 
 JWT_SECRET = require_env("JWT_SECRET")
 JWT_ISSUER = ENV.get("JWT_ISSUER", "gcm-hackathon-portal").strip()
@@ -49,20 +51,17 @@ class OTPVerifyBody(BaseModel):
     otp: str
 
 
-class UserPublic(BaseModel):
-    email: EmailStr
-    created_at: datetime
-    last_login_at: datetime
-
-
 class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
     user: UserPublic
 
+class ProfileUpdatePayload(BaseModel):
+    name: str | None = None
 
-security_scheme = HTTPBearer(auto_error=False)
+
+authorization = HTTPBearer(auto_error=False)
 
 
 def _utcnow() -> datetime:
@@ -110,24 +109,24 @@ def _client_ip(request: Request) -> str:
     return "unknown"
 
 
-def get_db(request: Request) -> Database[Any]:
-    return request.app.state.db
-
-
-def _enforce_otp_request_rate_limit(db: Database[Any], email: str, client_ip: str) -> None:
+def _enforce_otp_request_rate_limit(email: str, client_ip: str) -> None:
     count = consume_otp_request_slot(email, client_ip, OTP_REQUEST_WINDOW_MINUTES * 60)
     if count > OTP_REQUEST_LIMIT:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many OTP requests")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many OTP requests",
+        )
 
 
 def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(authorization),
+    db: Database[Any] = Depends(get_db),
 ) -> UserPublic:
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication")
-
-    db: Database[Any] = request.app.state.db
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication"
+        )
 
     try:
         payload = jwt.decode(
@@ -139,15 +138,27 @@ def get_current_user(
             options={"require": ["sub", "exp", "iat", "aud", "iss"]},
         )
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
 
     email = payload.get("sub")
     if not isinstance(email, str) or not email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject"
+        )
 
-    user_doc = db.users.find_one({"email": email}, {"_id": 0, "email": 1, "created_at": 1, "last_login_at": 1})
+    user_doc = db.users.find_one(
+        {"email": email}, {"_id": 0, "email": 1, "name": 1, "created_at": 1, "last_login_at": 1}
+    )
+
     if user_doc is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User does not exist")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User does not exist"
+        )
+    
+    if not user_doc.get("name"):
+        user_doc["name"] = email.split("@")[0]
 
     return UserPublic(**user_doc)
 
@@ -155,10 +166,9 @@ def get_current_user(
 def request_otp(
     payload: OTPRequestBody,
     request: Request,
-    db: Database[Any] = Depends(get_db),
 ) -> dict[str, str]:
     normalized_email = payload.email.strip().lower()
-    _enforce_otp_request_rate_limit(db, normalized_email, _client_ip(request))
+    _enforce_otp_request_rate_limit(normalized_email, _client_ip(request))
 
     otp = _new_otp()
     salt = secrets.token_bytes(16)
@@ -188,28 +198,38 @@ def verify_otp(
 ) -> AuthTokenResponse:
     normalized_email = payload.email.strip().lower()
     if not payload.otp.isdigit() or len(payload.otp) != OTP_LENGTH:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+        )
 
     challenge = fetch_otp_challenge(normalized_email)
     if challenge is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+        )
 
     salt_hex = challenge.get("salt")
     stored_hash = challenge.get("otp_hash")
     if not isinstance(salt_hex, str) or not isinstance(stored_hash, str):
         delete_otp_challenge(normalized_email)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+        )
 
     try:
         calculated_hash = _otp_hash(payload.otp, bytes.fromhex(salt_hex))
     except ValueError:
         delete_otp_challenge(normalized_email)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+        )
     if not hmac.compare_digest(stored_hash, calculated_hash):
         attempts = increment_otp_attempt_count(normalized_email)
         if attempts is None or attempts >= OTP_MAX_ATTEMPTS:
             delete_otp_challenge(normalized_email)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+        )
 
     db.users.update_one(
         {"email": normalized_email},
@@ -225,7 +245,10 @@ def verify_otp(
         {"_id": 0, "email": 1, "created_at": 1, "last_login_at": 1},
     )
     if user_doc is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not load user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not load user",
+        )
 
     access_token = _issue_access_token(normalized_email)
     delete_otp_challenge(normalized_email)
@@ -236,5 +259,34 @@ def verify_otp(
     )
 
 
-def auth_me(current_user: UserPublic = Depends(get_current_user)) -> UserPublic:
+def auth_me(
+    current_user: UserPublic = Depends(get_current_user),
+) -> UserPublic:
     return current_user
+
+
+def update_profile(
+    payload: ProfileUpdatePayload,
+    current_user: UserPublic = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> UserPublic:
+    update_fields = {}
+
+    if payload.name and payload.name != current_user.name:
+        update_fields["name"] = payload.name
+
+    if not update_fields:
+        return current_user
+
+    db.users.update_one({"email": current_user.email}, {"$set": update_fields})
+    updated_user_doc = db.users.find_one(
+        {"email": current_user.email},
+        {"_id": 0, "email": 1, "name": 1, "created_at": 1, "last_login_at": 1},
+    )
+    if updated_user_doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not load user after update",
+        )
+
+    return UserPublic(**updated_user_doc)
