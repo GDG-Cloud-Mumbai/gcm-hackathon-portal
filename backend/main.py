@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from utils.db import init_db
 from routes.auth import router as auth_router
@@ -26,6 +28,20 @@ app.include_router(auth_router)
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "GDG Cloud Mumbai Hackathon Portal API"}
+
+@app.exception_handler(RequestValidationError)
+def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    
+    custom_errors = [
+        {"field": ".".join(map(str, err["loc"])), "message": err["msg"]}
+        for err in errors
+    ]
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"status": "error", "errors": custom_errors},
+    )
 
 
 if __name__ == "__main__":
