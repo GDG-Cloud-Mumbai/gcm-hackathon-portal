@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
 
+from middlewares.auth import get_current_user
 from utils.env import ENV, get_int, require_env
 from utils.email import send_otp_email
 from utils.auth import (
@@ -59,9 +60,6 @@ class AuthTokenResponse(BaseModel):
 
 class ProfileUpdatePayload(BaseModel):
     name: str | None = None
-
-
-authorization = HTTPBearer(auto_error=False)
 
 
 def _utcnow() -> datetime:
@@ -116,51 +114,6 @@ def _enforce_otp_request_rate_limit(email: str, client_ip: str) -> None:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many OTP requests",
         )
-
-
-def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(authorization),
-    db: Database[Any] = Depends(get_db),
-) -> UserPublic:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication"
-        )
-
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            JWT_SECRET,
-            algorithms=["HS256"],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER,
-            options={"require": ["sub", "exp", "iat", "aud", "iss"]},
-        )
-    except jwt.PyJWTError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        ) from exc
-
-    email = payload.get("sub")
-    if not isinstance(email, str) or not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject"
-        )
-
-    user_doc = db.users.find_one(
-        {"email": email}, {"_id": 0, "email": 1, "name": 1, "created_at": 1, "last_login_at": 1}
-    )
-
-    if user_doc is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User does not exist"
-        )
-    
-    if not user_doc.get("name"):
-        user_doc["name"] = email.split("@")[0]
-
-    return UserPublic(**user_doc)
 
 
 def request_otp(
