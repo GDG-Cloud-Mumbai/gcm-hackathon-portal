@@ -11,7 +11,7 @@ services:
   mongodb:
     image: mongo:latest
     environment:
-      MONGODB_ROOT_PASSWORD: pass@123
+      MONGODB_ROOT_PASSWORD: pass123
       MONGODB_DATABASE: hackathon
     ports:
       - "27017:27017"
