@@ -29,15 +29,16 @@ app.include_router(auth_router)
 async def root() -> dict[str, str]:
     return {"message": "GDG Cloud Mumbai Hackathon Portal API"}
 
+
 @app.exception_handler(RequestValidationError)
 def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()
-    
+
     custom_errors = [
         {"field": ".".join(map(str, err["loc"])), "message": err["msg"]}
         for err in errors
     ]
-    
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"status": "error", "errors": custom_errors},
