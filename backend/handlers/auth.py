@@ -20,7 +20,7 @@ from utils.auth import (
 )
 from utils.db import get_db
 
-from models.user import UserPublic
+from models.user import UserPrivate
 
 JWT_SECRET = require_env("JWT_SECRET")
 JWT_ISSUER = ENV.get("JWT_ISSUER", "gcm-hackathon-portal").strip()
@@ -55,10 +55,11 @@ class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
-    user: UserPublic
+    user: UserPrivate
 
 class ProfileUpdatePayload(BaseModel):
     name: str | None = None
+    username: str | None = None
 
 
 def _utcnow() -> datetime:
@@ -194,7 +195,14 @@ def verify_otp(
 
     user_doc = db.users.find_one(
         {"email": normalized_email},
-        {"_id": 0, "email": 1, "created_at": 1, "last_login_at": 1},
+        {
+            "_id": 0,
+            "email": 1,
+            "created_at": 1,
+            "last_login_at": 1,
+            "name": 1,
+            "username": 1,
+        },
     )
     if user_doc is None:
         raise HTTPException(
@@ -207,25 +215,27 @@ def verify_otp(
     return AuthTokenResponse(
         access_token=access_token,
         expires_in=JWT_EXP_MINUTES * 60,
-        user=UserPublic(**user_doc),
+        user=UserPrivate(**user_doc),
     )
 
 
 def auth_me(
-    current_user: UserPublic = Depends(get_current_user),
-) -> UserPublic:
+    current_user: UserPrivate = Depends(get_current_user),
+) -> UserPrivate:
     return current_user
 
 
 def update_profile(
     payload: ProfileUpdatePayload,
-    current_user: UserPublic = Depends(get_current_user),
+    current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
-) -> UserPublic:
+) -> UserPrivate:
     update_fields = {}
 
-    if payload.name and payload.name != current_user.name:
-        update_fields["name"] = payload.name
+    for field in ["name", "username"]:
+        value = getattr(payload, field)
+        if value is not None and value.strip():
+            update_fields[field] = value.strip()
 
     if not update_fields:
         return current_user
@@ -233,7 +243,14 @@ def update_profile(
     db.users.update_one({"email": current_user.email}, {"$set": update_fields})
     updated_user_doc = db.users.find_one(
         {"email": current_user.email},
-        {"_id": 0, "email": 1, "name": 1, "created_at": 1, "last_login_at": 1},
+        {
+            "_id": 0,
+            "email": 1,
+            "name": 1,
+            "username": 1,
+            "created_at": 1,
+            "last_login_at": 1,
+        },
     )
     if updated_user_doc is None:
         raise HTTPException(
@@ -241,4 +258,4 @@ def update_profile(
             detail="Could not load user after update",
         )
 
-    return UserPublic(**updated_user_doc)
+    return UserPrivate(**updated_user_doc)
