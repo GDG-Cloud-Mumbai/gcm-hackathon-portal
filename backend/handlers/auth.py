@@ -7,6 +7,7 @@ from pymongo.database import Database
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
+import uuid
 
 from middlewares.auth import get_current_user
 from utils.env import ENV, get_int, require_env
@@ -187,8 +188,32 @@ def verify_otp(
     db.users.update_one(
         {"email": normalized_email},
         {
-            "$setOnInsert": {"email": normalized_email, "created_at": _utcnow()},
-            "$set": {"last_login_at": _utcnow()},
+            "$setOnInsert": {
+                # Public application identifier.
+                "uuid": str(uuid.uuid4()),
+
+                # Authentication email.
+                "email": normalized_email,
+
+                # Default display name.
+                "name": normalized_email.split("@")[0],
+
+                # Optional username.
+                "username": None,
+
+                # Default platform role.
+                "global_role": {
+                    "name": "user"
+                },
+
+                # Audit field.
+                "created_at": _utcnow(),
+            },
+
+            # Updated on every login.
+            "$set": {
+                "last_login_at": _utcnow()
+            }
         },
         upsert=True,
     )
@@ -196,12 +221,24 @@ def verify_otp(
     user_doc = db.users.find_one(
         {"email": normalized_email},
         {
+           
             "_id": 0,
+
+            # Public identifier.
+            "uuid": 1,
+
+            # User profile fields.
             "email": 1,
-            "created_at": 1,
-            "last_login_at": 1,
             "name": 1,
             "username": 1,
+
+            # Role information.
+            "global_role": 1,
+
+            # Audit fields.
+            "created_at": 1,
+            "last_login_at": 1,
+            
         },
     )
     if user_doc is None:
@@ -245,9 +282,11 @@ def update_profile(
         {"email": current_user.email},
         {
             "_id": 0,
+            "uuid": 1,
             "email": 1,
             "name": 1,
             "username": 1,
+            "global_role": 1,
             "created_at": 1,
             "last_login_at": 1,
         },
