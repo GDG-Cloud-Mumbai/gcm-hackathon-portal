@@ -13,4 +13,5 @@ dependencies = [
     "pymongo>=4.16.0",
     "redis>=7.4.0",
     "uvicorn>=0.44.0",
+    "uuid6>=2025.0.1",
 ]

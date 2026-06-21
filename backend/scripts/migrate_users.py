@@ -22,7 +22,7 @@ import sys
 # Add backend root directory to Python path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import uuid
+from uuid6 import uuid7
 
 from pymongo import MongoClient
 
@@ -50,7 +50,7 @@ def main() -> None:
 
         # Add UUID if missing.
         if not user.get("uuid"):
-            update_fields["uuid"] = str(uuid.uuid4())
+            update_fields["uuid"] = str(uuid7())
 
         # Generate a default display name from email.
         if not user.get("name"):

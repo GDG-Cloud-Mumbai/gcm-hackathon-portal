@@ -7,7 +7,7 @@ from pymongo.database import Database
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
-import uuid
+from uuid6 import uuid7
 
 from middlewares.auth import get_current_user
 from utils.env import ENV, get_int, require_env
@@ -190,7 +190,7 @@ def verify_otp(
         {
             "$setOnInsert": {
                 # Public application identifier.
-                "uuid": str(uuid.uuid4()),
+                "uuid": str(uuid7()),
 
                 # Authentication email.
                 "email": normalized_email,
