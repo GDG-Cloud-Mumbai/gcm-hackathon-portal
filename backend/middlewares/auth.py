@@ -48,11 +48,21 @@ def get_current_user(
         {"email": email},
         {
             "_id": 0,
+
+            # Public identifier.
+            "uuid": 1,
+
+            # User profile fields.
             "email": 1,
             "name": 1,
+            "username": 1,
+
+            # Role information.
+            "global_role": 1,
+
+            # Audit fields.
             "created_at": 1,
             "last_login_at": 1,
-            "username": 1,
         },
     )
 
