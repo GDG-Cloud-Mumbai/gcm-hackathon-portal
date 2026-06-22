@@ -10,6 +10,13 @@ from handlers.participant import (
     list_join_requests,
     approve_join_request,
     reject_join_request,
+    CreateInvitationPayload,
+    InvitationResponse,
+    InvitationItem,
+    create_invitation,
+    list_invitations,
+    accept_invitation,
+    decline_invitation,
 )
 
 router = APIRouter(
@@ -55,3 +62,30 @@ router.post(
     "/join-requests/{request_id}/reject",
     response_model=RequestActionResponse,
 )(reject_join_request)
+
+# Create a team invitation.
+router.post(
+    "/teams/{team_uuid}/invite",
+    response_model=InvitationResponse,
+)(create_invitation)
+
+
+# List pending invitations for current user.
+router.get(
+    "/invitations",
+    response_model=list[InvitationItem],
+)(list_invitations)
+
+
+# Accept invitation.
+router.post(
+    "/invitations/{invitation_id}/accept",
+    response_model=InvitationResponse,
+)(accept_invitation)
+
+
+# Decline invitation.
+router.post(
+    "/invitations/{invitation_id}/decline",
+    response_model=InvitationResponse,
+)(decline_invitation)
