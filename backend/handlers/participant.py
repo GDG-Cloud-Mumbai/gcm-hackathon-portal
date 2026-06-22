@@ -124,3 +124,113 @@ def create_team(
         team_code=team_code,
     )
 
+
+class JoinTeamPayload(BaseModel):
+    # Required only for private teams.
+    team_code: str | None = None
+
+
+class JoinRequestResponse(BaseModel):
+    # Team for which the request was created.
+    team_uuid: str
+
+    # Current request status.
+    status: str
+
+def join_team(
+    team_uuid: str,
+    payload: JoinTeamPayload,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> JoinRequestResponse:
+
+    # Ensure the target team exists.
+    team = db.teams.find_one({"uuid": team_uuid})
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    # Team leaders cannot create join requests for their own teams.
+    if team["leader_uuid"] == current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are already the leader of this team",
+        )
+
+    # Prevent users from joining multiple teams in the same hackathon.
+    active_memberships = db.team_members.find(
+        {
+            "user_uuid": current_user.uuid,
+            "left_at": None,
+        }
+    )
+
+    for membership in active_memberships:
+        existing_team = db.teams.find_one(
+            {"uuid": membership["team_uuid"]}
+        )
+
+        if (
+            existing_team
+            and existing_team.get("hackathon_uuid")
+            == team["hackathon_uuid"]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User is already part of a team in this hackathon",
+            )
+
+    # Prevent duplicate active requests for the same team.
+    existing_request = db.team_join_requests.find_one(
+        {
+            "team_uuid": team_uuid,
+            "user_uuid": current_user.uuid,
+            "status": {
+                "$in": [
+                    "pending",
+                    "waitlisted",
+                ]
+            },
+        }
+    )
+
+    if existing_request is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Join request already exists for this team",
+        )
+
+    # Private teams require a valid team code.
+    if not team["is_public"]:
+        if payload.team_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Team code is required",
+            )
+
+        if payload.team_code != team["team_code"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid team code",
+            )
+
+    now = _utcnow()
+
+    # Create a new join request.
+    db.team_join_requests.insert_one(
+        {
+            "team_uuid": team_uuid,
+            "user_uuid": current_user.uuid,
+            "status": "pending",
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+    return JoinRequestResponse(
+        team_uuid=team_uuid,
+        status="pending",
+    )
