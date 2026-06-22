@@ -11,6 +11,7 @@ from uuid6 import uuid7
 from middlewares.auth import get_current_user
 from models.user import UserPrivate, UserPublic
 from utils.db import get_db
+from bson import ObjectId
 
 
 def _utcnow() -> datetime:
@@ -307,3 +308,215 @@ def list_join_requests(
         )
 
     return response
+
+class RequestActionResponse(BaseModel):
+    # Join request identifier.
+    request_id: str
+
+    # Updated request status.
+    status: str
+
+def approve_join_request(
+    request_id: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> RequestActionResponse:
+
+    # Ensure the join request exists.
+    join_request = db.team_join_requests.find_one(
+        {"_id": ObjectId(request_id)}
+    )
+
+    if join_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Join request not found",
+        )
+
+    # Only pending requests can be approved.
+    if join_request["status"] != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Join request is no longer pending",
+        )
+
+    # Load the team associated with the request.
+    team = db.teams.find_one(
+        {"uuid": join_request["team_uuid"]}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    # Only the team leader can approve requests.
+    if team["leader_uuid"] != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only team leaders can approve requests",
+        )
+
+    applicant_uuid = join_request["user_uuid"]
+
+    # Prevent duplicate memberships.
+    existing_membership = db.team_members.find_one(
+        {
+            "team_uuid": team["uuid"],
+            "user_uuid": applicant_uuid,
+            "left_at": None,
+        }
+    )
+
+    if existing_membership is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already a team member",
+        )
+
+    # Ensure the applicant has not already joined another team
+    # in the same hackathon.
+    active_memberships = db.team_members.find(
+        {
+            "user_uuid": applicant_uuid,
+            "left_at": None,
+        }
+    )
+
+    for membership in active_memberships:
+        existing_team = db.teams.find_one(
+            {"uuid": membership["team_uuid"]}
+        )
+
+        if (
+            existing_team
+            and existing_team.get("hackathon_uuid")
+            == team["hackathon_uuid"]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User already belongs to a team in this hackathon",
+            )
+
+    now = _utcnow()
+
+    # Create team membership.
+    db.team_members.insert_one(
+        {
+            "team_uuid": team["uuid"],
+            "user_uuid": applicant_uuid,
+            "joined_at": now,
+            "left_at": None,
+        }
+    )
+
+    # Mark request approved.
+    db.team_join_requests.update_one(
+        {"_id": join_request["_id"]},
+        {
+            "$set": {
+                "status": "approved",
+                "approved_at": now,
+                "approved_by": current_user.uuid,
+                "updated_at": now,
+            }
+        },
+    )
+
+    # Close competing requests in the same hackathon.
+    competing_requests = db.team_join_requests.find(
+        {
+            "user_uuid": applicant_uuid,
+            "status": "pending",
+        }
+    )
+
+    for request in competing_requests:
+
+        other_team = db.teams.find_one(
+            {"uuid": request["team_uuid"]}
+        )
+
+        if (
+            other_team
+            and other_team.get("hackathon_uuid")
+            == team["hackathon_uuid"]
+        ):
+            db.team_join_requests.update_one(
+                {"_id": request["_id"]},
+                {
+                    "$set": {
+                        "status": "accepted_elsewhere",
+                        "updated_at": now,
+                    }
+                },
+            )
+
+    return RequestActionResponse(
+        request_id=request_id,
+        status="approved",
+    )
+
+
+def reject_join_request(
+    request_id: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> RequestActionResponse:
+
+    # Ensure the join request exists.
+    join_request = db.team_join_requests.find_one(
+        {"_id": ObjectId(request_id)}
+    )
+
+    if join_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Join request not found",
+        )
+
+    # Only pending requests can be rejected.
+    if join_request["status"] != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Join request is no longer pending",
+        )
+
+    # Load the associated team.
+    team = db.teams.find_one(
+        {"uuid": join_request["team_uuid"]}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    # Only the team leader can reject requests.
+    if team["leader_uuid"] != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only team leaders can reject requests",
+        )
+
+    now = _utcnow()
+
+    # Mark request as rejected.
+    db.team_join_requests.update_one(
+        {"_id": join_request["_id"]},
+        {
+            "$set": {
+                "status": "rejected",
+                "rejected_at": now,
+                "rejected_by": current_user.uuid,
+                "updated_at": now,
+            }
+        },
+    )
+
+    return RequestActionResponse(
+        request_id=request_id,
+        status="rejected",
+    )
