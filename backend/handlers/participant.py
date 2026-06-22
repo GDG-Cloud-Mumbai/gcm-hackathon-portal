@@ -9,7 +9,7 @@ from pymongo.database import Database
 from uuid6 import uuid7
 
 from middlewares.auth import get_current_user
-from models.user import UserPrivate
+from models.user import UserPrivate, UserPublic
 from utils.db import get_db
 
 
@@ -234,3 +234,76 @@ def join_team(
         team_uuid=team_uuid,
         status="pending",
     )
+
+class JoinRequestItem(BaseModel):
+    # Join request identifier.
+    request_id: str
+
+    # Public applicant information.
+    user: UserPublic
+
+    # Current request status.
+    status: str
+
+    # Request creation timestamp.
+    created_at: datetime | None = None
+
+
+def list_join_requests(
+    team_uuid: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> list[JoinRequestItem]:
+
+    # Ensure the team exists.
+    team = db.teams.find_one({"uuid": team_uuid})
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    # Only the team leader can review join requests.
+    if team["leader_uuid"] != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only team leaders can view join requests",
+        )
+
+    response: list[JoinRequestItem] = []
+
+    # Return only actionable requests.
+    pending_requests = db.team_join_requests.find(
+        {
+            "team_uuid": team_uuid,
+            "status": "pending",
+        }
+    )
+
+    for request in pending_requests:
+
+        # Load applicant information.
+        user_doc = db.users.find_one(
+            {"uuid": request["user_uuid"]},
+            {
+                "_id": 0,
+                "uuid": 1,
+                "username": 1,
+                "name": 1,
+            },
+        )
+
+        if user_doc is None:
+            continue
+
+        response.append(
+            JoinRequestItem(
+                request_id=str(request["_id"]),
+                user=UserPublic(**user_doc),
+                status=request["status"],
+                created_at=request.get("created_at"),
+            )
+        )
+
+    return response
