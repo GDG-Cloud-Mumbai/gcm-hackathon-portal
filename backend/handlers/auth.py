@@ -162,53 +162,52 @@ def verify_otp(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
         )
 
-    challenge = fetch_otp_challenge(normalized_email)
-    if challenge is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
-        )
+    skip_verification = False
 
-    salt_hex = challenge.get("salt")
-    stored_hash = challenge.get("otp_hash")
-    if not isinstance(salt_hex, str) or not isinstance(stored_hash, str):
-        delete_otp_challenge(normalized_email)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
-        )
+    if ENV.get("ENVIRONMENT", "PRODUCTION") == "DEVELOPMENT" and ENV.get("DEFAULT_OTP", None) == payload.otp:
+        skip_verification = True
 
-    try:
-        calculated_hash = _otp_hash(payload.otp, bytes.fromhex(salt_hex))
-    except ValueError:
-        delete_otp_challenge(normalized_email)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
-        )
-    if not hmac.compare_digest(stored_hash, calculated_hash):
-        attempts = increment_otp_attempt_count(normalized_email)
-        if attempts is None or attempts >= OTP_MAX_ATTEMPTS:
+    if not skip_verification:
+        challenge = fetch_otp_challenge(normalized_email)
+        if challenge is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+            )
+
+        salt_hex = challenge.get("salt")
+        stored_hash = challenge.get("otp_hash")
+        if not isinstance(salt_hex, str) or not isinstance(stored_hash, str):
             delete_otp_challenge(normalized_email)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
-        )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+            )
+
+        try:
+            calculated_hash = _otp_hash(payload.otp, bytes.fromhex(salt_hex))
+        except ValueError:
+            delete_otp_challenge(normalized_email)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+            )
+        if not hmac.compare_digest(stored_hash, calculated_hash):
+            attempts = increment_otp_attempt_count(normalized_email)
+            if attempts is None or attempts >= OTP_MAX_ATTEMPTS:
+                delete_otp_challenge(normalized_email)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+            )
 
     db.users.update_one(
         {"email": normalized_email},
         {
             "$setOnInsert": {
-                # Public application identifier.
                 "uuid": str(uuid7()),
-                # Authentication email.
                 "email": normalized_email,
-                # Default display name.
                 "name": normalized_email.split("@")[0],
-                # Optional username.
                 "username": None,
-                # Default platform role.
                 "global_role": {"name": "user"},
-                # Audit field.
                 "created_at": _utcnow(),
             },
-            # Updated on every login.
             "$set": {"last_login_at": _utcnow()},
         },
         upsert=True,
@@ -218,15 +217,11 @@ def verify_otp(
         {"email": normalized_email},
         {
             "_id": 0,
-            # Public identifier.
             "uuid": 1,
-            # User profile fields.
             "email": 1,
             "name": 1,
             "username": 1,
-            # Role information.
             "global_role": 1,
-            # Audit fields.
             "created_at": 1,
             "last_login_at": 1,
         },
