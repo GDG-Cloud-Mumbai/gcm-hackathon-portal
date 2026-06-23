@@ -10,7 +10,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "pydantic[email]>=2.11.4",
     "pyjwt==2.13.0",
-    "pymongo>=4.16.0",
+    "pymongo>=4.17.0",
     "redis>=8.0.0",
     "uvicorn>=0.44.0",
     "uuid6>=2025.0.1",
