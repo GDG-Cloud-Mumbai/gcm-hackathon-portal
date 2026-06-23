@@ -58,6 +58,7 @@ class AuthTokenResponse(BaseModel):
     expires_in: int
     user: UserPrivate
 
+
 class ProfileUpdatePayload(BaseModel):
     name: str | None = None
     username: str | None = None
@@ -113,7 +114,8 @@ def _client_ip(request: Request) -> str:
 
 
 def _enforce_otp_request_rate_limit(email: str, client_ip: str) -> None:
-    count = consume_otp_request_slot(email, client_ip, OTP_REQUEST_WINDOW_MINUTES * 60)
+    count = consume_otp_request_slot(
+        email, client_ip, OTP_REQUEST_WINDOW_MINUTES * 60)
     if count > OTP_REQUEST_LIMIT:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -273,8 +275,9 @@ def update_profile(
     if not update_fields:
         return current_user
 
-    if "username" in update_fields:
-        existing_user = db.users.find_one({"username": update_fields["username"]})
+    if "username" in update_fields.keys():
+        existing_user = db.users.find_one(
+            {"username": update_fields["username"]})
         if existing_user and existing_user["email"] != current_user.email:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
