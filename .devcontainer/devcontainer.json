@@ -3,7 +3,7 @@
 
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
 
-  "onCreateCommand": "curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts",
+  "postCreateCommand": "curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts || true",
 
-  "postStartCommand": "echo 'source $HOME/google-cloud-sdk/path.bash.inc' >> ~/.bashrc || true"
+  "postStartCommand": "export PATH=$PATH:$HOME/google-cloud-sdk/bin"
 }
