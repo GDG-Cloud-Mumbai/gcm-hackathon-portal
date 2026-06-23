@@ -2,7 +2,9 @@ from fastapi import APIRouter
 
 from handlers.auth import (
     AuthTokenResponse,
+    CheckUsernameResponse,
     auth_me,
+    check_username,
     request_otp,
     verify_otp,
     update_profile,
@@ -15,3 +17,7 @@ router.post("/request-otp")(request_otp)
 router.post("/verify-otp", response_model=AuthTokenResponse)(verify_otp)
 router.get("/me", response_model=UserPrivate)(auth_me)
 router.patch("/update-profile", response_model=UserPrivate)(update_profile)
+router.get(
+    "/check-username/{username}",
+    response_model=CheckUsernameResponse,
+)(check_username)

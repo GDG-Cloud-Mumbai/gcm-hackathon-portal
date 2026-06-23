@@ -63,6 +63,10 @@ class ProfileUpdatePayload(BaseModel):
     username: str | None = None
 
 
+class CheckUsernameResponse(BaseModel):
+    is_available: bool
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -191,29 +195,19 @@ def verify_otp(
             "$setOnInsert": {
                 # Public application identifier.
                 "uuid": str(uuid7()),
-
                 # Authentication email.
                 "email": normalized_email,
-
                 # Default display name.
                 "name": normalized_email.split("@")[0],
-
                 # Optional username.
                 "username": None,
-
                 # Default platform role.
-                "global_role": {
-                    "name": "user"
-                },
-
+                "global_role": {"name": "user"},
                 # Audit field.
                 "created_at": _utcnow(),
             },
-
             # Updated on every login.
-            "$set": {
-                "last_login_at": _utcnow()
-            }
+            "$set": {"last_login_at": _utcnow()},
         },
         upsert=True,
     )
@@ -221,24 +215,18 @@ def verify_otp(
     user_doc = db.users.find_one(
         {"email": normalized_email},
         {
-           
             "_id": 0,
-
             # Public identifier.
             "uuid": 1,
-
             # User profile fields.
             "email": 1,
             "name": 1,
             "username": 1,
-
             # Role information.
             "global_role": 1,
-
             # Audit fields.
             "created_at": 1,
             "last_login_at": 1,
-            
         },
     )
     if user_doc is None:
@@ -262,6 +250,14 @@ def auth_me(
     return current_user
 
 
+def check_username(
+    username: str,
+    db: Database[Any] = Depends(get_db),
+) -> CheckUsernameResponse:
+    user = db.users.find_one({"username": username})
+    return CheckUsernameResponse(is_available=user is None)
+
+
 def update_profile(
     payload: ProfileUpdatePayload,
     current_user: UserPrivate = Depends(get_current_user),
@@ -276,6 +272,14 @@ def update_profile(
 
     if not update_fields:
         return current_user
+
+    if "username" in update_fields:
+        existing_user = db.users.find_one({"username": update_fields["username"]})
+        if existing_user and existing_user["email"] != current_user.email:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username is already taken",
+            )
 
     db.users.update_one({"email": current_user.email}, {"$set": update_fields})
     updated_user_doc = db.users.find_one(
