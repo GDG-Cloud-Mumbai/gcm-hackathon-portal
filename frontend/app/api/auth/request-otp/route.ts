@@ -29,25 +29,25 @@ export async function POST(request: Request) {
 
     const text = await backendResponse.text();
 
-    let data: any = {};
+    let data: unknown = {};
     try {
       data = text ? JSON.parse(text) : {};
     } catch {
       data = { message: text };
     }
-
+    const errorData = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
     if (!backendResponse.ok) {
       console.error("Request OTP failed:", {
         status: backendResponse.status,
-        data,
+        data: errorData,
       });
 
       return NextResponse.json(
         {
           message:
-            data.detail ||
-            data.message ||
-            data.error ||
+            errorData.detail ||
+            errorData.message ||
+            errorData.error ||
             "Something went wrong with the OTP request.",
         },
         {

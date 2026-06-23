@@ -36,25 +36,26 @@ export async function POST(request: Request) {
 
     const text = await backendResponse.text();
 
-    let data: any = {};
+    let data: unknown = {};
     try {
       data = text ? JSON.parse(text) : {};
     } catch {
       data = { message: text };
     }
+    const parsed = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
 
-    if (!backendResponse.ok || !data.access_token) {
+    if (!backendResponse.ok || !parsed.access_token) {
       console.error("Verify OTP failed:", {
         status: backendResponse.status,
-        data,
+        data: parsed,
       });
 
       return NextResponse.json(
         {
           message:
-            data.detail ||
-            data.message ||
-            data.error ||
+            parsed.detail ||
+            parsed.message ||
+            parsed.error ||
             "Invalid or expired OTP.",
         },
         {
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const authData = data as AuthResponse;
+    const authData = parsed as AuthResponse;
 
     const response = NextResponse.json({
       user: authData.user,

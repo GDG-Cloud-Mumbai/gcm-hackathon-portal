@@ -1,0 +1,22 @@
+name: Engineering task
+description: Implementation task
+title: "[Task]: "
+labels: ["task"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Checklist
+      placeholder: |
+        - [ ] Implement
+        - [ ] Verify locally
+        - [ ] Add docs
+    validations:
+      required: true

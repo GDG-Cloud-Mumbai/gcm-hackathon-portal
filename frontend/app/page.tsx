@@ -398,10 +398,10 @@ export default function Home() {
                       response = client.models.generate_content(
                     </p>
                     <p className="pl-4 text-[#81c784]">
-                      model=<span className="text-[#ffd54f]">'gemini-2.5-flash'</span>,
+                      model=<span className="text-[#ffd54f]">&apos;gemini-2.5-flash&apos;</span>,
                     </p>
                     <p className="pl-4 text-[#81c784]">
-                      contents=<span className="text-[#ffd54f]">'Make a premium hackathon website'</span>
+                      contents=<span className="text-[#ffd54f]">&apos;Make a premium hackathon website&apos;</span>
                     </p>
                     <p className="text-white">)</p>
                     <p className="space-x-2">
@@ -590,7 +590,7 @@ export default function Home() {
             <h2 className="text-xs font-mono uppercase tracking-widest text-[#81c784]">Help Center</h2>
             <h3 className="text-3xl sm:text-4xl font-extrabold text-white">Portal FAQs</h3>
             <p className="text-sm sm:text-base text-zinc-400">
-              Got questions about team registration, cloud sandboxes, or submissions? We've got answers.
+              Got questions about team registration, cloud sandboxes, or submissions? We&apos;ve got answers.
             </p>
           </div>
 
