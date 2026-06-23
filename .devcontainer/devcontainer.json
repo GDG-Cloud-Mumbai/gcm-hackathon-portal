@@ -1,9 +1,9 @@
 {
-  "name": "Codespaces",
+  "name": "codespace",
+
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "features": {
-    "ghcr.io/devcontainers/features/gcloud:1": {
-      "version": "latest"
-    }
-  }
+
+  "onCreateCommand": "curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts",
+
+  "postStartCommand": "echo 'source $HOME/google-cloud-sdk/path.bash.inc' >> ~/.bashrc || true"
 }
