@@ -1,9 +1,6 @@
 {
-  "name": "codespace",
-
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-
-  "postCreateCommand": "curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts || true",
-
-  "postStartCommand": "export PATH=$PATH:$HOME/google-cloud-sdk/bin"
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+  "ghcr.io/dhoeric/features/google-cloud-cli:1" : {}
+  }
 }
