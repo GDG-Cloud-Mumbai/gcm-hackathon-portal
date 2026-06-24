@@ -693,7 +693,6 @@ def list_invitations(
     return response
 
 
-from bson import ObjectId
 
 
 def accept_invitation(
@@ -894,3 +893,357 @@ def decline_invitation(
         invitation_id=invitation_id,
         status="declined",
     )
+
+
+class TeamMemberItem(BaseModel):
+    uuid: str
+    username: str | None = None
+    name: str
+    is_leader: bool
+
+
+class MyTeamResponse(BaseModel):
+    team_uuid: str
+    team_name: str
+    team_code: str
+
+    hackathon_uuid: str
+    track_uuid: str
+
+    is_leader: bool
+
+    members: list[TeamMemberItem]
+
+def get_my_team(
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> MyTeamResponse:
+
+    membership = db.team_members.find_one(
+        {
+            "user_uuid": current_user.uuid,
+            "left_at": None,
+        }
+    )
+
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not part of any team",
+        )
+
+    team = db.teams.find_one(
+        {"uuid": membership["team_uuid"]}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    members: list[TeamMemberItem] = []
+
+    team_members = db.team_members.find(
+        {
+            "team_uuid": team["uuid"],
+            "left_at": None,
+        }
+    )
+
+    for member in team_members:
+
+        user = db.users.find_one(
+            {"uuid": member["user_uuid"]}
+        )
+
+        if user is None:
+            continue
+
+        members.append(
+            TeamMemberItem(
+                uuid=user["uuid"],
+                username=user.get("username"),
+                name=user["name"],
+                is_leader=(
+                    user["uuid"]
+                    == team["leader_uuid"]
+                ),
+            )
+        )
+
+    return MyTeamResponse(
+        team_uuid=team["uuid"],
+        team_name=team["name"],
+        team_code=team["team_code"],
+        hackathon_uuid=team["hackathon_uuid"],
+        track_uuid=team["track_uuid"],
+        is_leader=(
+            current_user.uuid
+            == team["leader_uuid"]
+        ),
+        members=members,
+    )
+
+
+class LeaveTeamResponse(BaseModel):
+    team_uuid: str
+    status: str
+
+def leave_team(
+    team_uuid: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> LeaveTeamResponse:
+
+    team = db.teams.find_one(
+        {"uuid": team_uuid}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    membership = db.team_members.find_one(
+        {
+            "team_uuid": team_uuid,
+            "user_uuid": current_user.uuid,
+            "left_at": None,
+        }
+    )
+
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a member of this team",
+        )
+
+    # Leader special rules.
+    if team["leader_uuid"] == current_user.uuid:
+
+        active_member_count = db.team_members.count_documents(
+            {
+                "team_uuid": team_uuid,
+                "left_at": None,
+            }
+        )
+
+        # Leader cannot leave while other members exist.
+        if active_member_count > 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Transfer leadership before leaving the team",
+            )
+
+    now = _utcnow()
+
+    db.team_members.update_one(
+        {"_id": membership["_id"]},
+        {
+            "$set": {
+                "left_at": now,
+            }
+        },
+    )
+
+    return LeaveTeamResponse(
+        team_uuid=team_uuid,
+        status="left",
+    )
+
+class TransferLeadershipPayload(BaseModel):
+    member_uuid: str
+
+
+class TransferLeadershipResponse(BaseModel):
+    team_uuid: str
+    leader_uuid: str
+
+def transfer_leadership(
+    team_uuid: str,
+    payload: TransferLeadershipPayload,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> TransferLeadershipResponse:
+
+    team = db.teams.find_one(
+        {"uuid": team_uuid}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    if team["leader_uuid"] != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the current leader can transfer leadership",
+        )
+
+    if payload.member_uuid == current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already the team leader",
+        )
+
+    target_membership = db.team_members.find_one(
+        {
+            "team_uuid": team_uuid,
+            "user_uuid": payload.member_uuid,
+            "left_at": None,
+        }
+    )
+
+    if target_membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Target user is not an active team member",
+        )
+
+    db.teams.update_one(
+        {"uuid": team_uuid},
+        {
+            "$set": {
+                "leader_uuid": payload.member_uuid,
+                "updated_at": _utcnow(),
+            }
+        },
+    )
+
+    return TransferLeadershipResponse(
+        team_uuid=team_uuid,
+        leader_uuid=payload.member_uuid,
+    )
+
+class RemoveMemberPayload(BaseModel):
+    member_uuid: str
+
+
+class RemoveMemberResponse(BaseModel):
+    team_uuid: str
+    member_uuid: str
+    status: str
+
+def remove_member(
+    team_uuid: str,
+    payload: RemoveMemberPayload,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> RemoveMemberResponse:
+
+    team = db.teams.find_one(
+        {"uuid": team_uuid}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    if team["leader_uuid"] != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the team leader can remove members",
+        )
+
+    if payload.member_uuid == current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Use leave team instead",
+        )
+
+    membership = db.team_members.find_one(
+        {
+            "team_uuid": team_uuid,
+            "user_uuid": payload.member_uuid,
+            "left_at": None,
+        }
+    )
+
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Target user is not an active team member",
+        )
+
+    now = _utcnow()
+
+    db.team_members.update_one(
+        {"_id": membership["_id"]},
+        {
+            "$set": {
+                "left_at": now,
+            }
+        },
+    )
+
+    return RemoveMemberResponse(
+        team_uuid=team_uuid,
+        member_uuid=payload.member_uuid,
+        status="removed",
+    )
+
+class CancelInvitationResponse(BaseModel):
+    invitation_id: str
+    status: str
+
+def cancel_invitation(
+    invitation_id: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> CancelInvitationResponse:
+
+    invitation = db.team_invitations.find_one(
+        {"_id": ObjectId(invitation_id)}
+    )
+
+    if invitation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found",
+        )
+
+    team = db.teams.find_one(
+        {"uuid": invitation["team_uuid"]}
+    )
+
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    if team["leader_uuid"] != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the team leader can cancel invitations",
+        )
+
+    if invitation["status"] != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only pending invitations can be cancelled",
+        )
+
+    now = _utcnow()
+
+    db.team_invitations.update_one(
+        {"_id": invitation["_id"]},
+        {
+            "$set": {
+                "status": "cancelled",
+                "updated_at": now,
+            }
+        },
+    )
+
+    return CancelInvitationResponse(
+        invitation_id=invitation_id,
+        status="cancelled",
+    )
+

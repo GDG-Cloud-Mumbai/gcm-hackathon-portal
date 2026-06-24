@@ -17,6 +17,19 @@ from handlers.participant import (
     list_invitations,
     accept_invitation,
     decline_invitation,
+    TeamMemberItem,
+    MyTeamResponse,
+    get_my_team,
+    LeaveTeamResponse,
+    leave_team,
+    TransferLeadershipPayload,
+    TransferLeadershipResponse,
+    transfer_leadership,
+    RemoveMemberPayload,
+    RemoveMemberResponse,
+    remove_member,
+    CancelInvitationResponse,
+    cancel_invitation,
 )
 
 router = APIRouter(
@@ -89,3 +102,31 @@ router.post(
     "/invitations/{invitation_id}/decline",
     response_model=InvitationResponse,
 )(decline_invitation)
+
+# Get current user's team.
+router.get(
+    "/me/team",
+    response_model=MyTeamResponse,
+)(get_my_team)
+
+
+# Leave team.
+router.post(
+    "/teams/{team_uuid}/leave",
+    response_model=LeaveTeamResponse,
+)(leave_team)
+
+router.post(
+    "/teams/{team_uuid}/transfer-leadership",
+    response_model=TransferLeadershipResponse,
+)(transfer_leadership)
+
+router.post(
+    "/teams/{team_uuid}/remove-member",
+    response_model=RemoveMemberResponse,
+)(remove_member)
+
+router.post(
+    "/invitations/{invitation_id}/cancel",
+    response_model=CancelInvitationResponse,
+)(cancel_invitation)
