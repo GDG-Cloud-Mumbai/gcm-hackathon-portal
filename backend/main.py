@@ -8,6 +8,14 @@ from routes.auth import router as auth_router
 from utils.redis import get_redis_client, reset_redis_client
 
 
+from utils.db import init_db
+from routes.auth import router as auth_router
+from routes.participant import router as participant_router
+from utils.redis import get_redis_client, reset_redis_client
+
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.mongo_client, app.state.db = init_db()
@@ -49,3 +57,9 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("main:app", host="0.0.0.0", port=8888, reload=True)
+
+
+    app = FastAPI(lifespan=lifespan)
+
+app.include_router(auth_router)
+app.include_router(participant_router)
