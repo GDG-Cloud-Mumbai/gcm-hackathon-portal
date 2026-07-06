@@ -107,7 +107,7 @@ export default function HackathonTeamPage() {
 
       {team.is_leader && (
         <>
-          <InviteSearch teamUuid={team.team_uuid} />
+          <InviteSearch teamUuid={team.team_uuid} currentUserUuid={currentUserUuid} />
           <JoinRequestsPanel teamUuid={team.team_uuid} />
         </>
       )}

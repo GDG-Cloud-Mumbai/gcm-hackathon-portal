@@ -397,7 +397,7 @@ def approve_join_request(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already belongs to a team in this hackathon",
+                detail="User already belongs to another team in this hackathon",
             )
 
     now = _utcnow()
@@ -637,7 +637,7 @@ def create_invitation(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already belongs to a team in this hackathon",
+                detail="User already belongs to another team in this hackathon",
             )
 
     now = _utcnow()
@@ -758,7 +758,7 @@ def accept_invitation(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already belongs to a team in this hackathon",
+                detail="User already belongs to another team in this hackathon",
             )
 
     now = _utcnow()
