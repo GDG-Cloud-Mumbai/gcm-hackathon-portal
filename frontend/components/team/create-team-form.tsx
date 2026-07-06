@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { CreateTeamPayload, TeamResponse } from "@/lib/types";
+import type { Hackathon, TeamResponse } from "@/lib/types";
 
 type Props = {
+  hackathon: Hackathon;
   onSuccess: (team: TeamResponse) => void;
   onCancel: () => void;
 };
@@ -11,36 +12,39 @@ type Props = {
 const INPUT =
   "h-11 w-full rounded-xl border border-white/10 bg-black px-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10";
 
-export function CreateTeamForm({ onSuccess, onCancel }: Props) {
+export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
+  const singleTrack = hackathon.tracks.length === 1;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [hackathonUuid, setHackathonUuid] = useState("");
-  const [trackUuid, setTrackUuid] = useState("");
-  const [isPublic, setIsPublic] = useState(true);
+  const [trackUuid, setTrackUuid] = useState(singleTrack ? hackathon.tracks[0].track_uuid : "");
+  const [requiredSkills, setRequiredSkills] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !hackathonUuid.trim() || !trackUuid.trim()) return;
+    if (!name.trim() || !trackUuid) return;
 
     setLoading(true);
     setError("");
 
-    const payload: CreateTeamPayload = {
-      name: name.trim(),
-      description: description.trim(),
-      hackathon_uuid: hackathonUuid.trim(),
-      track_uuid: trackUuid.trim(),
-      is_public: isPublic,
-      required_skills: [],
-    };
+    const skills = requiredSkills
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     try {
       const res = await fetch("/api/participants/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          hackathon_uuid: hackathon.hackathon_uuid,
+          track_uuid: trackUuid,
+          is_public: false,
+          required_skills: skills,
+        }),
       });
       const data = (await res.json()) as { detail?: string } & Partial<TeamResponse>;
       if (!res.ok) {
@@ -72,74 +76,68 @@ export function CreateTeamForm({ onSuccess, onCancel }: Props) {
         />
       </div>
 
-      <div>
-        <label htmlFor="team-desc" className="mb-1.5 block text-xs text-white/60">
-          Description
-        </label>
-        <input
-          id="team-desc"
-          className={INPUT}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What will you build?"
-          maxLength={256}
-        />
-      </div>
-
-      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
-        <p className="text-xs font-medium text-white/40 uppercase tracking-wider">
-          Hackathon details
-          <span className="ml-2 normal-case text-white/25">
-            — provided by your organiser
-          </span>
-        </p>
+      {/* Track selector — hidden when only one track exists */}
+      {!singleTrack && (
         <div>
-          <label htmlFor="hackathon-uuid" className="mb-1.5 block text-xs text-white/60">
-            Hackathon UUID <span className="text-[#f28b82]">*</span>
+          <label htmlFor="team-track" className="mb-1.5 block text-xs text-white/60">
+            Track <span className="text-[#f28b82]">*</span>
           </label>
-          <input
-            id="hackathon-uuid"
-            className={INPUT}
-            value={hackathonUuid}
-            onChange={(e) => setHackathonUuid(e.target.value)}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="track-uuid" className="mb-1.5 block text-xs text-white/60">
-            Track UUID <span className="text-[#f28b82]">*</span>
-          </label>
-          <input
-            id="track-uuid"
-            className={INPUT}
+          <select
+            id="team-track"
+            className="h-11 w-full rounded-xl border border-white/10 bg-black px-4 text-sm text-white outline-none transition focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10"
             value={trackUuid}
             onChange={(e) => setTrackUuid(e.target.value)}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             required
-          />
+          >
+            <option value="" disabled>Select a track…</option>
+            {hackathon.tracks.map((t) => (
+              <option key={t.track_uuid} value={t.track_uuid}>
+                {t.name}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
+      )}
+      {singleTrack && (
+        <p className="text-xs text-white/30">
+          Track: <span className="text-white/50">{hackathon.tracks[0].name}</span>
+        </p>
+      )}
 
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isPublic}
-          aria-label="Public team"
-          onClick={() => setIsPublic(!isPublic)}
-          className={`relative h-6 w-11 rounded-full transition ${isPublic ? "bg-[#4285F4]" : "bg-white/10"}`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-5" : "translate-x-0"}`}
-          />
-        </button>
-        <span className="text-sm text-white/60">
-          {isPublic
-            ? "Public — anyone can request to join"
-            : "Private — team code required to join"}
-        </span>
-      </div>
+      {/* Advanced — collapsible */}
+      <details className="group rounded-xl border border-white/[0.06]">
+        <summary className="cursor-pointer list-none px-4 py-3 text-xs text-white/40 transition hover:text-white/60">
+          <span className="select-none">Advanced</span>
+        </summary>
+        <div className="space-y-4 border-t border-white/[0.06] px-4 pb-4 pt-3">
+          <div>
+            <label htmlFor="team-desc" className="mb-1.5 block text-xs text-white/60">
+              Description
+            </label>
+            <input
+              id="team-desc"
+              className={INPUT}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What will you build?"
+              maxLength={256}
+            />
+          </div>
+          <div>
+            <label htmlFor="team-skills" className="mb-1.5 block text-xs text-white/60">
+              Required Skills
+              <span className="ml-1.5 text-white/25">(comma-separated)</span>
+            </label>
+            <input
+              id="team-skills"
+              className={INPUT}
+              value={requiredSkills}
+              onChange={(e) => setRequiredSkills(e.target.value)}
+              placeholder="Python, React, Cloud"
+            />
+          </div>
+        </div>
+      </details>
 
       {error && (
         <div className="rounded-xl border border-[#f28b82]/25 bg-[#f28b82]/10 px-4 py-3 text-sm text-[#f28b82]">
@@ -157,7 +155,7 @@ export function CreateTeamForm({ onSuccess, onCancel }: Props) {
         </button>
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !trackUuid}
           className="h-11 flex-1 rounded-full bg-white text-sm font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Creating…" : "Create Team"}

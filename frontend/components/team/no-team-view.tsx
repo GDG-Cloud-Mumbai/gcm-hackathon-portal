@@ -3,16 +3,16 @@
 import { useState } from "react";
 import { CreateTeamForm } from "./create-team-form";
 import { JoinTeamForm } from "./join-team-form";
-import type { TeamResponse } from "@/lib/types";
+import type { Hackathon, TeamResponse } from "@/lib/types";
 
 type View = "choice" | "create" | "join";
 
 type Props = {
+  hackathon: Hackathon;
   onTeamCreated: (team: TeamResponse) => void;
-  onJoinRequested: () => void;
 };
 
-export function NoTeamView({ onTeamCreated, onJoinRequested }: Props) {
+export function NoTeamView({ hackathon, onTeamCreated }: Props) {
   const [view, setView] = useState<View>("choice");
 
   return (
@@ -66,6 +66,7 @@ export function NoTeamView({ onTeamCreated, onJoinRequested }: Props) {
               Create a Team
             </h2>
             <CreateTeamForm
+              hackathon={hackathon}
               onSuccess={onTeamCreated}
               onCancel={() => setView("choice")}
             />
@@ -83,10 +84,7 @@ export function NoTeamView({ onTeamCreated, onJoinRequested }: Props) {
             <h2 className="mb-6 text-lg font-semibold text-white">
               Join a Team
             </h2>
-            <JoinTeamForm
-              onSuccess={onJoinRequested}
-              onCancel={() => setView("choice")}
-            />
+            <JoinTeamForm onCancel={() => setView("choice")} />
           </div>
         )}
       </div>

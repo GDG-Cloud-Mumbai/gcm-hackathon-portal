@@ -82,3 +82,31 @@ export type TransferLeadershipPayload = {
 export type RemoveMemberPayload = {
   member_uuid: string;
 };
+
+export type Track = {
+  track_uuid: string;
+  name: string;
+};
+
+export type HackathonStatus = "upcoming" | "active" | "ended";
+
+export type Hackathon = {
+  hackathon_uuid: string;
+  name: string;
+  tagline: string;
+  description: string;
+  status: HackathonStatus;
+  starts_at: string;
+  ends_at: string;
+  registration_open: boolean;
+  max_team_size: number;
+  min_team_size: number;
+  tracks: Track[];
+};
+
+export type ParticipantSearchResult = {
+  uuid: string;
+  name: string;
+  username: string | null;
+  email: string;
+};

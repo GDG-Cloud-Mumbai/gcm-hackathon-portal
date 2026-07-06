@@ -1,132 +1,156 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ParticipantSearchResult } from "@/lib/types";
 
 type Props = {
   teamUuid: string;
 };
 
-/*
- * BACKEND GAP: participant search by email is not yet available.
- *
- * Required endpoint: GET /participants/users/search?email=<query>
- * Response: [{ uuid, name, email, username }]
- *
- * When the endpoint ships, replace the placeholder below with a real search
- * that calls /api/participants/users/search, displays results, and sends
- * the selected user's uuid to POST /api/participants/teams/:uuid/invite.
- */
+type SearchState =
+  | { status: "idle" }
+  | { status: "searching" }
+  | { status: "results"; results: ParticipantSearchResult[] }
+  | { status: "no-results" }
+  | { status: "error"; message: string };
+
+type InviteStatus = "idle" | "inviting" | "sent" | "error";
+
+const INPUT =
+  "h-11 w-full rounded-xl border border-white/10 bg-black px-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10";
 
 export function InviteSearch({ teamUuid }: Props) {
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState("");
-  const [error, setError] = useState("");
+  const [search, setSearch] = useState<SearchState>({ status: "idle" });
+  const [inviteStates, setInviteStates] = useState<Record<string, InviteStatus>>({});
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Placeholder — remove once backend search endpoint exists.
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
-    setLoading(true);
-    setError("");
-    setSuccess("");
-    // Simulate network delay for realistic feel
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
-    setError(
-      "Participant search is not available yet. Ask the participant for their user UUID and use the direct invite field below.",
-    );
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (query.length < 2) {
+      setSearch({ status: "idle" });
+      return;
+    }
+
+    setSearch({ status: "searching" });
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/participants/users/search?email=${encodeURIComponent(query)}`,
+        );
+        if (!res.ok) {
+          const data = (await res.json()) as { detail?: string };
+          setSearch({ status: "error", message: data.detail ?? "Search failed." });
+          return;
+        }
+        const results = (await res.json()) as ParticipantSearchResult[];
+        setSearch(
+          results.length > 0
+            ? { status: "results", results }
+            : { status: "no-results" },
+        );
+      } catch {
+        setSearch({ status: "error", message: "Network error. Please try again." });
+      }
+    }, 350);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  function setInvite(uuid: string, s: InviteStatus) {
+    setInviteStates((prev) => ({ ...prev, [uuid]: s }));
   }
 
-  async function handleDirectInvite(uuid: string) {
-    setError("");
-    setSuccess("");
-    const res = await fetch(`/api/participants/teams/${teamUuid}/invite`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_uuid: uuid }),
-    });
-    const data = (await res.json()) as { detail?: string };
-    if (!res.ok) {
-      setError(data.detail ?? "Failed to send invitation.");
-    } else {
-      setSuccess("Invitation sent successfully.");
-      setQuery("");
+  async function handleInvite(p: ParticipantSearchResult) {
+    setInvite(p.uuid, "inviting");
+    try {
+      const res = await fetch(`/api/participants/teams/${teamUuid}/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_uuid: p.uuid }),
+      });
+      if (!res.ok) {
+        setInvite(p.uuid, "error");
+        setTimeout(() => setInvite(p.uuid, "idle"), 3000);
+        return;
+      }
+      setInvite(p.uuid, "sent");
+    } catch {
+      setInvite(p.uuid, "error");
+      setTimeout(() => setInvite(p.uuid, "idle"), 3000);
     }
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-zinc-950 p-5">
-      <h3 className="mb-3 text-sm font-medium text-white">Invite a Participant</h3>
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950">
+      <div className="border-b border-white/[0.06] px-5 py-4">
+        <h3 className="text-sm font-medium text-white">Invite Member</h3>
+      </div>
 
-      {/* Email search (placeholder) */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <input
-          type="email"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by email address…"
-          className="h-10 flex-1 rounded-xl border border-white/10 bg-black px-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10"
-        />
-        <button
-          type="submit"
-          disabled={loading || !query.trim()}
-          className="h-10 shrink-0 rounded-xl border border-white/10 px-4 text-sm text-white/60 transition hover:text-white disabled:opacity-40"
-        >
-          {loading ? "…" : "Search"}
-        </button>
-      </form>
+      <div className="space-y-4 p-5">
+        <div className="relative">
+          <input
+            className={INPUT}
+            type="email"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by email…"
+            autoComplete="off"
+          />
+          {search.status === "searching" && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <span className="block h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+            </div>
+          )}
+        </div>
 
-      {/* Direct invite by UUID (fallback) */}
-      <DirectUuidInvite onInvite={handleDirectInvite} />
+        {search.status === "idle" && (
+          <p className="text-xs text-white/25">Type at least 2 characters to search.</p>
+        )}
 
-      {error && (
-        <p className="mt-3 text-xs text-[#f28b82]">{error}</p>
-      )}
-      {success && (
-        <p className="mt-3 text-xs text-[#81c784]">{success}</p>
-      )}
+        {search.status === "no-results" && (
+          <p className="text-sm text-white/30">No participants found for that email.</p>
+        )}
 
-      <p className="mt-3 text-[11px] leading-relaxed text-white/20">
-        Email-based participant search requires a backend endpoint that is not
-        yet available. The direct UUID invite above works in the meantime.
-      </p>
+        {search.status === "error" && (
+          <p className="text-sm text-[#f28b82]">{search.message}</p>
+        )}
+
+        {search.status === "results" && (
+          <ul className="space-y-2">
+            {search.results.map((p) => {
+              const s = inviteStates[p.uuid] ?? "idle";
+              return (
+                <li
+                  key={p.uuid}
+                  className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-white">{p.name}</p>
+                    <p className="truncate text-xs text-white/30">{p.email}</p>
+                  </div>
+                  <button
+                    onClick={() => handleInvite(p)}
+                    disabled={s !== "idle"}
+                    className={`h-8 shrink-0 rounded-full px-3 text-xs font-medium transition disabled:cursor-not-allowed ${
+                      s === "sent"
+                        ? "border border-[#34A853]/20 bg-[#34A853]/10 text-[#81c784]"
+                        : s === "error"
+                        ? "border border-[#f28b82]/20 bg-[#f28b82]/10 text-[#f28b82]"
+                        : "bg-white text-black hover:bg-zinc-100 disabled:opacity-50"
+                    }`}
+                  >
+                    {s === "inviting" ? "…" : s === "sent" ? "Invited" : s === "error" ? "Failed" : "Invite"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
-  );
-}
-
-function DirectUuidInvite({
-  onInvite,
-}: {
-  onInvite: (uuid: string) => Promise<void>;
-}) {
-  const [uuid, setUuid] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handle(e: React.FormEvent) {
-    e.preventDefault();
-    if (!uuid.trim()) return;
-    setLoading(true);
-    await onInvite(uuid.trim());
-    setUuid("");
-    setLoading(false);
-  }
-
-  return (
-    <form onSubmit={handle} className="mt-3 flex gap-2">
-      <input
-        value={uuid}
-        onChange={(e) => setUuid(e.target.value)}
-        placeholder="Or paste user UUID directly"
-        className="h-10 flex-1 rounded-xl border border-white/[0.06] bg-black/60 px-3 font-mono text-xs text-white/60 outline-none transition placeholder:text-white/15 focus:border-[#8ab4f8]/40 focus:text-white"
-      />
-      <button
-        type="submit"
-        disabled={loading || !uuid.trim()}
-        className="h-10 shrink-0 rounded-xl bg-white px-4 text-sm font-medium text-black transition hover:bg-zinc-100 disabled:opacity-40"
-      >
-        {loading ? "…" : "Invite"}
-      </button>
-    </form>
   );
 }

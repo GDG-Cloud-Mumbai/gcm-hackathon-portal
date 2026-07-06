@@ -11,7 +11,7 @@ const protectedRoutes = [
   "/home",
   "/dashboard",
   "/profile",
-  "/team",
+  "/hackathons",
   "/submissions",
   "/admin",
 ];

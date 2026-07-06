@@ -30,6 +30,8 @@ from handlers.participant import (
     remove_member,
     CancelInvitationResponse,
     cancel_invitation,
+    UserSearchItem,
+    search_users,
 )
 
 router = APIRouter(
@@ -130,3 +132,10 @@ router.post(
     "/invitations/{invitation_id}/cancel",
     response_model=CancelInvitationResponse,
 )(cancel_invitation)
+
+
+# Search participants by email prefix (for team invitations).
+router.get(
+    "/users/search",
+    response_model=list[UserSearchItem],
+)(search_users)

@@ -6,11 +6,8 @@ import { useState } from "react";
 
 const primaryLinks = [
   { href: "/home", label: "Home" },
-  { href: "/team", label: "Team" },
   { href: "/profile", label: "Profile" },
 ];
-
-const placeholderLinks = ["Submissions", "Announcements"];
 
 export function Nav() {
   const pathname = usePathname();
@@ -67,15 +64,6 @@ export function Nav() {
             >
               {link.label}
             </Link>
-          ))}
-          {placeholderLinks.map((label) => (
-            <span
-              key={label}
-              title="Coming soon"
-              className="flex h-8 cursor-not-allowed select-none items-center rounded-full px-3 text-sm text-white/20"
-            >
-              {label}
-            </span>
           ))}
         </nav>
 
@@ -139,17 +127,6 @@ export function Nav() {
               >
                 {link.label}
               </Link>
-            ))}
-            {placeholderLinks.map((label) => (
-              <span
-                key={label}
-                className="flex h-10 cursor-not-allowed select-none items-center rounded-xl px-3 text-sm text-white/20"
-              >
-                {label}
-                <span className="ml-auto text-[10px] uppercase tracking-wider">
-                  Soon
-                </span>
-              </span>
             ))}
           </nav>
           <div className="mt-3 border-t border-white/[0.06] pt-3">
