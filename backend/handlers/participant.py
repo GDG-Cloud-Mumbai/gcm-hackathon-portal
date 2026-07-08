@@ -1,9 +1,10 @@
 import random
+import re
 import string
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from pymongo.database import Database
 from uuid6 import uuid7
@@ -396,7 +397,7 @@ def approve_join_request(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already belongs to a team in this hackathon",
+                detail="User already belongs to another team in this hackathon",
             )
 
     now = _utcnow()
@@ -636,7 +637,7 @@ def create_invitation(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already belongs to a team in this hackathon",
+                detail="User already belongs to another team in this hackathon",
             )
 
     now = _utcnow()
@@ -757,7 +758,7 @@ def accept_invitation(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already belongs to a team in this hackathon",
+                detail="User already belongs to another team in this hackathon",
             )
 
     now = _utcnow()
@@ -915,32 +916,58 @@ class MyTeamResponse(BaseModel):
     members: list[TeamMemberItem]
 
 def get_my_team(
+    hackathon_uuid: str | None = Query(None),
     current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
 ) -> MyTeamResponse:
 
-    membership = db.team_members.find_one(
-        {
-            "user_uuid": current_user.uuid,
-            "left_at": None,
-        }
-    )
-
-    if membership is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not part of any team",
+    if hackathon_uuid:
+        active_memberships = list(
+            db.team_members.find(
+                {
+                    "user_uuid": current_user.uuid,
+                    "left_at": None,
+                }
+            )
         )
 
-    team = db.teams.find_one(
-        {"uuid": membership["team_uuid"]}
-    )
+        team_uuids = [m["team_uuid"] for m in active_memberships]
 
-    if team is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Team not found",
+        team = db.teams.find_one(
+            {
+                "uuid": {"$in": team_uuids},
+                "hackathon_uuid": hackathon_uuid,
+            }
         )
+
+        if team is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User is not part of any team in this hackathon",
+            )
+    else:
+        membership = db.team_members.find_one(
+            {
+                "user_uuid": current_user.uuid,
+                "left_at": None,
+            }
+        )
+
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User is not part of any team",
+            )
+
+        team = db.teams.find_one(
+            {"uuid": membership["team_uuid"]}
+        )
+
+        if team is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Team not found",
+            )
 
     members: list[TeamMemberItem] = []
 
@@ -1247,3 +1274,25 @@ def cancel_invitation(
         status="cancelled",
     )
 
+
+class UserSearchItem(BaseModel):
+    uuid: str
+    name: str
+    username: str | None = None
+    email: str
+
+
+def search_users(
+    email: str = Query(..., min_length=2),
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> list[UserSearchItem]:
+    # re.escape prevents user input from being interpreted as regex operators.
+    pattern = f"^{re.escape(email.strip())}"
+
+    cursor = db.users.find(
+        {"email": {"$regex": pattern, "$options": "i"}},
+        {"_id": 0, "uuid": 1, "name": 1, "username": 1, "email": 1},
+    ).limit(10)
+
+    return [UserSearchItem(**doc) for doc in cursor]
