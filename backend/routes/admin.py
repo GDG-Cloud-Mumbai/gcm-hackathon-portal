@@ -18,6 +18,12 @@ from handlers.hackathon import (
 
 )
 
+from handlers.track import (
+    TrackResponse,
+    create_track,
+)
+
+
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
@@ -94,3 +100,9 @@ router.post(
     "/hackathons/{hackathon_uuid}/restore",
     response_model=HackathonResponse,
 )(restore_hackathon)
+
+router.post(
+    "/hackathons/{hackathon_uuid}/tracks",
+    response_model=TrackResponse,
+)(create_track)
+
