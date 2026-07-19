@@ -21,6 +21,7 @@ from handlers.hackathon import (
 from handlers.track import (
     create_track,
     list_tracks,
+    get_track,
     TrackResponse,
     TrackListResponse,
 )
@@ -112,3 +113,9 @@ router.get(
     "/hackathons/{hackathon_uuid}/tracks",
     response_model=TrackListResponse,
 )(list_tracks)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/tracks/{track_uuid}",
+    response_model=TrackResponse,
+)(get_track)
+

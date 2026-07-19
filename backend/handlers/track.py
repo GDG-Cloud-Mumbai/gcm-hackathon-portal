@@ -87,6 +87,29 @@ def _get_hackathon_by_uuid(
     return hackathon
 
 
+def _get_track_by_uuid(
+    *,
+    track_uuid: str,
+    hackathon_uuid: str,
+    db: Database[Any],
+) -> dict[str, Any]:
+    """Return a track document by UUID."""
+
+    track = _track_collection(db).find_one(
+        {
+            "uuid": track_uuid,
+            "hackathon_uuid": hackathon_uuid,
+        }
+    )
+
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+
+    return track
+
 
 def _validate_unique_track_name(
     *,
@@ -222,3 +245,29 @@ async def list_tracks(
     return TrackListResponse(
         tracks=tracks,
     )
+
+async def get_track(
+    hackathon_uuid: str,
+    track_uuid: str,
+    db: Database[Any] = Depends(get_db),
+    current_user: UserPrivate = Depends(get_current_user),
+) -> TrackResponse:
+    """Get a track by UUID."""
+
+    _authorize_admin(current_user)
+
+    _get_hackathon_by_uuid(
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track_document = _get_track_by_uuid(
+        track_uuid=track_uuid,
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track = _build_track_from_document(track_document)
+
+    return _build_track_response(track)
+
