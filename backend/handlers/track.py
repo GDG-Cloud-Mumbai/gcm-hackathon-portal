@@ -33,6 +33,10 @@ class TrackResponse(BaseModel):
     name: str
     status: TrackStatus
 
+class TrackListResponse(BaseModel):
+    tracks: list[TrackResponse]
+
+
 # ------------------------------------------------------------------
 # Helper Functions
 # ------------------------------------------------------------------
@@ -124,6 +128,12 @@ def _build_track_response(track: Track) -> TrackResponse:
         status=track.status,
     )
 
+def _build_track_from_document(
+    document: dict[str, Any],
+) -> Track:
+    """Convert a MongoDB document into a Track model."""
+
+    return Track(**document)
 
 
 # ------------------------------------------------------------------
@@ -181,3 +191,34 @@ async def create_track(
 
     return _build_track_response(track)
     
+
+async def list_tracks(
+    hackathon_uuid: str,
+    db: Database[Any] = Depends(get_db),
+    current_user: UserPrivate = Depends(get_current_user),
+) -> TrackListResponse:
+    """List all tracks for a hackathon."""
+
+    _authorize_admin(current_user)
+
+    _get_hackathon_by_uuid(
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    documents = _track_collection(db).find(
+        {
+            "hackathon_uuid": hackathon_uuid,
+        }
+    )
+
+    tracks = [
+        _build_track_response(
+            _build_track_from_document(document)
+        )
+        for document in documents
+    ]
+
+    return TrackListResponse(
+        tracks=tracks,
+    )
