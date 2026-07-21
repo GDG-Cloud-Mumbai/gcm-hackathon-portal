@@ -21,7 +21,9 @@ class CreateTrackPayload(BaseModel):
     name: str
     description: str | None = None
 
-
+class UpdateTrackPayload(BaseModel):
+    name: str | None = None
+    description: str | None = None
 
 # ------------------------------------------------------------------
 # Response Models
@@ -31,6 +33,7 @@ class TrackResponse(BaseModel):
     uuid: str
     hackathon_uuid: str
     name: str
+    description: str | None = None
     status: TrackStatus
 
 class TrackListResponse(BaseModel):
@@ -88,11 +91,11 @@ def _get_hackathon_by_uuid(
 
 
 def _get_track_by_uuid(
-    *,
-    track_uuid: str,
-    hackathon_uuid: str,
-    db: Database[Any],
-) -> dict[str, Any]:
+        *,
+        track_uuid: str,
+        hackathon_uuid: str,
+        db: Database[Any],
+    ) -> dict[str, Any]:
     """Return a track document by UUID."""
 
     track = _track_collection(db).find_one(
@@ -116,6 +119,7 @@ def _validate_unique_track_name(
     db: Database[Any],
     hackathon_uuid: str,
     name: str,
+    exclude_track_uuid: str | None = None,
 ) -> None:
     """Ensure that a track name is unique within a hackathon."""
 
@@ -126,7 +130,7 @@ def _validate_unique_track_name(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Track name cannot be empty",
         )
-    
+
     existing_track = _track_collection(db).find_one(
         {
             "hackathon_uuid": hackathon_uuid,
@@ -134,20 +138,23 @@ def _validate_unique_track_name(
         }
     )
 
-    if existing_track is not None:
+    if (
+        existing_track is not None
+        and existing_track["uuid"] != exclude_track_uuid
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Track name already exists for this hackathon",
         )
     
     
-
 def _build_track_response(track: Track) -> TrackResponse:
     """Build a public response model for a track."""
     return TrackResponse(
         uuid=track.uuid,
         hackathon_uuid=track.hackathon_uuid,
         name=track.name,
+        description=track.description,
         status=track.status,
     )
 
@@ -246,6 +253,7 @@ async def list_tracks(
         tracks=tracks,
     )
 
+
 async def get_track(
     hackathon_uuid: str,
     track_uuid: str,
@@ -270,4 +278,68 @@ async def get_track(
     track = _build_track_from_document(track_document)
 
     return _build_track_response(track)
+
+
+async def update_track(
+    hackathon_uuid: str,
+    track_uuid: str,
+    payload: UpdateTrackPayload,
+    db: Database[Any] = Depends(get_db),
+    current_user: UserPrivate = Depends(get_current_user),
+) -> TrackResponse:
+    """Update an existing track."""
+
+    _authorize_admin(current_user)
+
+    _get_hackathon_by_uuid(
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track_document = _get_track_by_uuid(
+        track_uuid=track_uuid,
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track = _build_track_from_document(track_document)
+
+    name = (
+        payload.name.strip()
+        if payload.name is not None
+        else track.name
+    )
+
+    description = (
+        payload.description.strip()
+        if payload.description is not None
+        else track.description
+    )
+
+    _validate_unique_track_name(
+        db=db,
+        hackathon_uuid=hackathon_uuid,
+        name=name,
+        exclude_track_uuid=track.uuid,
+    )
+    
+    track.name = name
+    track.description = description
+    track.updated_at = _utcnow()
+
+    _track_collection(db).update_one(
+        {
+            "uuid": track.uuid,
+        },
+        {
+            "$set": {
+                "name": track.name,
+                "description": track.description,
+                "updated_at": track.updated_at,
+            }
+        },
+    )
+    
+    return _build_track_response(track)
+
 

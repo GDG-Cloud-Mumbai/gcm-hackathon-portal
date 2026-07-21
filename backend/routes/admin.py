@@ -24,6 +24,7 @@ from handlers.track import (
     get_track,
     TrackResponse,
     TrackListResponse,
+    update_track,
 )
 
 
@@ -119,3 +120,7 @@ router.get(
     response_model=TrackResponse,
 )(get_track)
 
+router.patch(
+    "/hackathons/{hackathon_uuid}/tracks/{track_uuid}",
+    response_model=TrackResponse,
+)(update_track)
