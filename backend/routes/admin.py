@@ -25,6 +25,8 @@ from handlers.track import (
     TrackResponse,
     TrackListResponse,
     update_track,
+    archive_track,
+    restore_track,
 )
 
 
@@ -124,3 +126,14 @@ router.patch(
     "/hackathons/{hackathon_uuid}/tracks/{track_uuid}",
     response_model=TrackResponse,
 )(update_track)
+
+router.post(
+    "/hackathons/{hackathon_uuid}/tracks/{track_uuid}/archive",
+    response_model=TrackResponse,
+)(archive_track)
+
+router.post(
+    "/hackathons/{hackathon_uuid}/tracks/{track_uuid}/restore",
+    response_model=TrackResponse,
+)(restore_track)
+

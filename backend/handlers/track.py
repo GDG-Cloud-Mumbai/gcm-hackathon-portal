@@ -343,3 +343,100 @@ async def update_track(
     return _build_track_response(track)
 
 
+async def archive_track(
+    hackathon_uuid: str,
+    track_uuid: str,
+    db: Database[Any] = Depends(get_db),
+    current_user: UserPrivate = Depends(get_current_user),
+) -> TrackResponse:
+    """Archive an existing track."""
+
+    _authorize_admin(current_user)
+
+    _get_hackathon_by_uuid(
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track_document = _get_track_by_uuid(
+        track_uuid=track_uuid,
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track = _build_track_from_document(track_document)
+
+    track.status = TrackStatus.ARCHIVED
+    track.updated_at = _utcnow()
+
+    _track_collection(db).update_one(
+        {
+            "uuid": track.uuid,
+        },
+        {
+            "$set": {
+                "status": track.status,
+                "updated_at": track.updated_at,
+            }
+        },
+    )
+
+    track = _build_track_from_document(track_document)
+
+    if track.status == TrackStatus.ARCHIVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Track is already archived",
+        )
+
+    track.status = TrackStatus.ARCHIVED
+    track.updated_at = _utcnow()
+
+    return _build_track_response(track)
+
+
+async def restore_track(
+    hackathon_uuid: str,
+    track_uuid: str,
+    db: Database[Any] = Depends(get_db),
+    current_user: UserPrivate = Depends(get_current_user),
+) -> TrackResponse:
+    """Restore an archived track."""
+
+    _authorize_admin(current_user)
+
+    _get_hackathon_by_uuid(
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track_document = _get_track_by_uuid(
+        track_uuid=track_uuid,
+        hackathon_uuid=hackathon_uuid,
+        db=db,
+    )
+
+    track = _build_track_from_document(track_document)
+
+    if track.status == TrackStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Track is already active",
+        )
+
+    track.status = TrackStatus.ACTIVE
+    track.updated_at = _utcnow()
+
+    _track_collection(db).update_one(
+        {
+            "uuid": track.uuid,
+        },
+        {
+            "$set": {
+                "status": track.status,
+                "updated_at": track.updated_at,
+            }
+        },
+    )
+
+    return _build_track_response(track)
