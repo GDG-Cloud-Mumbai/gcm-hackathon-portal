@@ -1,5 +1,13 @@
 from datetime import datetime
+from enum import Enum
+
 from pydantic import BaseModel
+
+
+class TrackStatus(str, Enum):
+    ACTIVE = "active"
+    DISABLED = "disabled"
+    ARCHIVED = "archived"
 
 
 class Track(BaseModel):
@@ -12,11 +20,11 @@ class Track(BaseModel):
     hackathon_uuid: str
 
     # Track details
-    title: str
+    name: str
     description: str
 
-    # Soft-disable support
-    is_active: bool = True
+    # Lifecycle
+    status: TrackStatus = TrackStatus.ACTIVE
 
     # Audit fields
     created_at: datetime | None = None
