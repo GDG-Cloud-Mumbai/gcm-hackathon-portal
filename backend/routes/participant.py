@@ -36,6 +36,10 @@ from handlers.participant import (
     list_active_hackathons,
     ParticipantHackathonHistoryResponse,
     list_participated_hackathons,
+    ParticipantHackathonDetailResponse,
+    get_participant_hackathon,
+    ParticipantTrackListResponse,
+    list_participant_tracks,
 )
 
 router = APIRouter(
@@ -52,6 +56,16 @@ router.get(
     "/hackathons",
     response_model=ParticipantHackathonListResponse,
 )(list_active_hackathons)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/tracks",
+    response_model=ParticipantTrackListResponse,
+)(list_participant_tracks)
+
+router.get(
+    "/hackathons/{hackathon_uuid}",
+    response_model=ParticipantHackathonDetailResponse,
+)(get_participant_hackathon)
 
 router.get(
     "/hackathons/history",

@@ -15,7 +15,7 @@ from utils.db import get_db
 from bson import ObjectId
 
 from models.hackathon import HackathonStatus
-
+from models.track import TrackStatus
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -60,6 +60,46 @@ class ParticipantHackathonHistoryItem(ParticipantHackathonItem):
 class ParticipantHackathonHistoryResponse(BaseModel):
     hackathons: list[ParticipantHackathonHistoryItem]
 
+class ParticipantHackathonDetailResponse(BaseModel):
+    uuid: str
+    slug: str
+    name: str
+    description: str | None = None
+
+    logo_url: str | None = None
+    banner_url: str | None = None
+
+    timezone: str
+
+    status: HackathonStatus
+
+    registration_start: datetime
+    registration_end: datetime
+
+    event_start: datetime
+    event_end: datetime
+
+    submission_start: datetime
+    submission_deadline: datetime
+
+    min_team_size: int
+    max_team_size: int
+
+    allow_individual_registration: bool
+
+    is_public: bool
+
+class ParticipantTrackItem(BaseModel):
+    uuid: str
+    hackathon_uuid: str
+    name: str
+    description: str | None = None
+    status: TrackStatus
+
+
+class ParticipantTrackListResponse(BaseModel):
+    tracks: list[ParticipantTrackItem]
+
 def list_active_hackathons(
     current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
@@ -98,6 +138,113 @@ def list_active_hackathons(
 
     return ParticipantHackathonListResponse(
         hackathons=hackathons,
+    )
+
+def get_participant_hackathon(
+    hackathon_uuid: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> ParticipantHackathonDetailResponse:
+    """Get a public hackathon's details for a participant."""
+
+    hackathon = db.hackathons.find_one(
+        {
+            "uuid": hackathon_uuid,
+        }
+    )
+
+    if hackathon is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+
+    if not hackathon.get("is_public", False):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+
+    if hackathon.get("status") == HackathonStatus.ARCHIVED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+
+    return ParticipantHackathonDetailResponse(
+        uuid=hackathon["uuid"],
+        slug=hackathon["slug"],
+        name=hackathon["name"],
+        description=hackathon.get("description"),
+        logo_url=hackathon.get("logo_url"),
+        banner_url=hackathon.get("banner_url"),
+        timezone=hackathon["timezone"],
+        status=HackathonStatus(hackathon["status"]),
+        registration_start=hackathon["registration_start"],
+        registration_end=hackathon["registration_end"],
+        event_start=hackathon["event_start"],
+        event_end=hackathon["event_end"],
+        submission_start=hackathon["submission_start"],
+        submission_deadline=hackathon["submission_deadline"],
+        min_team_size=hackathon["min_team_size"],
+        max_team_size=hackathon["max_team_size"],
+        allow_individual_registration=hackathon[
+            "allow_individual_registration"
+        ],
+        is_public=hackathon["is_public"],
+    )
+
+def list_participant_tracks(
+    hackathon_uuid: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> ParticipantTrackListResponse:
+    """List active tracks for a public hackathon."""
+
+    hackathon = db.hackathons.find_one(
+        {
+            "uuid": hackathon_uuid,
+        }
+    )
+
+    if hackathon is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+
+    if not hackathon.get("is_public", False):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+
+    if hackathon.get("status") == HackathonStatus.ARCHIVED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+
+    tracks = db.tracks.find(
+        {
+            "hackathon_uuid": hackathon_uuid,
+            "status": TrackStatus.ACTIVE,
+        }
+    )
+
+    track_items = [
+        ParticipantTrackItem(
+            uuid=track["uuid"],
+            hackathon_uuid=track["hackathon_uuid"],
+            name=track["name"],
+            description=track.get("description"),
+            status=TrackStatus(track["status"]),
+        )
+        for track in tracks
+    ]
+
+    return ParticipantTrackListResponse(
+        tracks=track_items,
     )
 
 def list_participated_hackathons(
