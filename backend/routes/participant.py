@@ -32,6 +32,8 @@ from handlers.participant import (
     cancel_invitation,
     UserSearchItem,
     search_users,
+    ParticipantHackathonListResponse,
+    list_active_hackathons,
 )
 
 router = APIRouter(
@@ -44,6 +46,10 @@ router = APIRouter(
 def ping():
     return {"message": "participants route working"}
 
+router.get(
+    "/hackathons",
+    response_model=ParticipantHackathonListResponse,
+)(list_active_hackathons)
 
 router.post(
     "/teams",

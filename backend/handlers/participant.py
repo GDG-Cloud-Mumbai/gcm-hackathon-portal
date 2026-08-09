@@ -14,6 +14,8 @@ from models.user import UserPrivate, UserPublic
 from utils.db import get_db
 from bson import ObjectId
 
+from models.hackathon import HackathonStatus
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -37,6 +39,60 @@ class CreateTeamPayload(BaseModel):
 
     is_public: bool = True
     required_skills: list[str] = Field(default_factory=list)
+
+
+class ParticipantHackathonItem(BaseModel):
+    uuid: str
+    slug: str
+    name: str
+    description: str | None = None
+    logo_url: str | None = None
+    banner_url: str | None = None
+    status: HackathonStatus
+
+
+class ParticipantHackathonListResponse(BaseModel):
+    hackathons: list[ParticipantHackathonItem]
+
+def list_active_hackathons(
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> ParticipantHackathonListResponse:
+    """List public hackathons currently relevant to participants."""
+
+    active_statuses = [
+        HackathonStatus.PUBLISHED,
+        HackathonStatus.REGISTRATION_OPEN,
+        HackathonStatus.REGISTRATION_CLOSED,
+        HackathonStatus.ONGOING,
+        HackathonStatus.JUDGING,
+    ]
+
+    documents = db.hackathons.find(
+        {
+            "is_public": True,
+            "status": {
+                "$in": [status.value for status in active_statuses],
+            },
+        }
+    )
+
+    hackathons = [
+        ParticipantHackathonItem(
+            uuid=document["uuid"],
+            slug=document["slug"],
+            name=document["name"],
+            description=document.get("description"),
+            logo_url=document.get("logo_url"),
+            banner_url=document.get("banner_url"),
+            status=HackathonStatus(document["status"]),
+        )
+        for document in documents
+    ]
+
+    return ParticipantHackathonListResponse(
+        hackathons=hackathons,
+    )
 
 
 class TeamResponse(BaseModel):
