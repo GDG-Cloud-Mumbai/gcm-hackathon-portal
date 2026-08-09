@@ -54,6 +54,12 @@ class ParticipantHackathonItem(BaseModel):
 class ParticipantHackathonListResponse(BaseModel):
     hackathons: list[ParticipantHackathonItem]
 
+class ParticipantHackathonHistoryItem(ParticipantHackathonItem):
+    participated_at: datetime | None = None
+
+class ParticipantHackathonHistoryResponse(BaseModel):
+    hackathons: list[ParticipantHackathonHistoryItem]
+
 def list_active_hackathons(
     current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
@@ -94,6 +100,104 @@ def list_active_hackathons(
         hackathons=hackathons,
     )
 
+def list_participated_hackathons(
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> ParticipantHackathonHistoryResponse:
+    """List hackathons the current user has participated in."""
+
+    team_memberships = db.team_members.find(
+        {
+            "user_uuid": current_user.uuid,
+        }
+    )
+
+    team_uuids = [
+        membership["team_uuid"]
+        for membership in team_memberships
+    ]
+
+    if not team_uuids:
+        return ParticipantHackathonHistoryResponse(
+            hackathons=[]
+        )
+
+    teams = db.teams.find(
+        {
+            "uuid": {
+                "$in": team_uuids,
+            }
+        }
+    )
+
+    team_documents = list(teams)
+
+    hackathon_join_dates: dict[str, datetime] = {}
+
+    for membership in db.team_members.find(
+        {
+            "user_uuid": current_user.uuid,
+            "team_uuid": {
+                "$in": team_uuids,
+            },
+        }
+    ):
+        team = next(
+            (
+                team_document
+                for team_document in team_documents
+                if team_document["uuid"] == membership["team_uuid"]
+            ),
+            None,
+        )
+
+        if team is None:
+            continue
+
+        hackathon_uuid = team["hackathon_uuid"]
+        joined_at = membership.get("joined_at")
+
+        if (
+            joined_at is not None
+            and (
+                hackathon_uuid not in hackathon_join_dates
+                or joined_at < hackathon_join_dates[hackathon_uuid]
+            )
+        ):
+            hackathon_join_dates[hackathon_uuid] = joined_at
+
+    if not hackathon_join_dates:
+        return ParticipantHackathonHistoryResponse(
+            hackathons=[]
+        )
+
+    hackathons = db.hackathons.find(
+        {
+            "uuid": {
+                "$in": list(hackathon_join_dates.keys()),
+            }
+        }
+    )
+
+    history = [
+        ParticipantHackathonHistoryItem(
+            uuid=hackathon["uuid"],
+            slug=hackathon["slug"],
+            name=hackathon["name"],
+            description=hackathon.get("description"),
+            logo_url=hackathon.get("logo_url"),
+            banner_url=hackathon.get("banner_url"),
+            status=HackathonStatus(hackathon["status"]),
+            participated_at=hackathon_join_dates.get(
+                hackathon["uuid"]
+            ),
+        )
+        for hackathon in hackathons
+    ]
+
+    return ParticipantHackathonHistoryResponse(
+        hackathons=history
+    )
 
 class TeamResponse(BaseModel):
     uuid: str
