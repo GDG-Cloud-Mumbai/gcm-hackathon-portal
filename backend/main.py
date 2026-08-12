@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from routes.auth import router as auth_router
 from routes.participant import router as participant_router
+from routes.submission import router as submission_router
 from routes.admin import router as admin_router
 
 from utils.db import init_db
@@ -31,6 +32,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(participant_router)
+app.include_router(submission_router)
 app.include_router(admin_router)
 
 
