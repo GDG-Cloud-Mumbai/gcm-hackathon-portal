@@ -29,6 +29,37 @@ from handlers.track import (
     restore_track,
 )
 
+from handlers.hackathon_member import (
+    HackathonMemberResponse,
+    HackathonMemberListResponse,
+    CreateHackathonMemberPayload,
+    UpdateHackathonMemberPayload,
+    create_hackathon_member,
+    list_hackathon_members,
+    update_hackathon_member,
+    delete_hackathon_member,
+)
+
+
+from handlers.judge_assignment import (
+    JudgeAssignmentResponse,
+    JudgeAssignmentListResponse,
+    CreateJudgeAssignmentPayload,
+    UpdateJudgeAssignmentPayload,
+    create_judge_assignment,
+    list_judge_assignments,
+    update_judge_assignment,
+    delete_judge_assignment,
+)
+
+from handlers.judging_criteria import (
+    create_judging_criterion,
+    list_judging_criteria,
+    update_judging_criterion,
+    delete_judging_criterion,
+    JudgingCriterionResponse,
+    JudgingCriterionListResponse,
+)
 
 router = APIRouter(
     prefix="/admin",
@@ -137,3 +168,63 @@ router.post(
     response_model=TrackResponse,
 )(restore_track)
 
+router.post(
+    "/hackathons/{hackathon_uuid}/members",
+    response_model=HackathonMemberResponse,
+)(create_hackathon_member)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/members",
+    response_model=HackathonMemberListResponse,
+)(list_hackathon_members)
+
+router.patch(
+    "/hackathons/{hackathon_uuid}/members/{member_uuid}",
+    response_model=HackathonMemberResponse,
+)(update_hackathon_member)
+
+router.delete(
+    "/hackathons/{hackathon_uuid}/members/{member_uuid}",
+)(delete_hackathon_member)
+
+router.post(
+    "/hackathons/{hackathon_uuid}/judge-assignments",
+    response_model=JudgeAssignmentResponse,
+)(create_judge_assignment)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/judge-assignments",
+    response_model=JudgeAssignmentListResponse,
+)(list_judge_assignments)
+
+router.patch(
+    "/hackathons/{hackathon_uuid}/judge-assignments/{assignment_uuid}",
+    response_model=JudgeAssignmentResponse,
+)(update_judge_assignment)
+
+router.delete(
+    "/hackathons/{hackathon_uuid}/judge-assignments/{assignment_uuid}",
+)(delete_judge_assignment)
+
+# ------------------------------------------------------------------
+# Judging Criteria
+# ------------------------------------------------------------------
+
+router.post(
+    "/hackathons/{hackathon_uuid}/judging-criteria",
+    response_model=JudgingCriterionResponse,
+)(create_judging_criterion)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/judging-criteria",
+    response_model=JudgingCriterionListResponse,
+)(list_judging_criteria)
+
+router.patch(
+    "/hackathons/{hackathon_uuid}/judging-criteria/{criterion_uuid}",
+    response_model=JudgingCriterionResponse,
+)(update_judging_criterion)
+
+router.delete(
+    "/hackathons/{hackathon_uuid}/judging-criteria/{criterion_uuid}",
+)(delete_judging_criterion)

@@ -12,6 +12,7 @@ from routes.admin import router as admin_router
 from utils.db import init_db
 from utils.redis import get_redis_client, reset_redis_client
 
+from routes.judge import router as judge_router
 
 
 
@@ -34,6 +35,7 @@ app.include_router(auth_router)
 app.include_router(participant_router)
 app.include_router(submission_router)
 app.include_router(admin_router)
+app.include_router(judge_router)
 
 
 @app.get("/")
