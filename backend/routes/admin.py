@@ -52,6 +52,11 @@ from handlers.judge_assignment import (
     delete_judge_assignment,
 )
 
+from handlers.admin_judges import (
+    AdminJudgeWorkloadListResponse,
+    list_admin_judges,
+)
+
 from handlers.judging_criteria import (
     create_judging_criterion,
     list_judging_criteria,
@@ -269,6 +274,11 @@ router.get(
     "/hackathons/{hackathon_uuid}/judging",
     response_model=AdminJudgingResponse,
 )(get_admin_judging)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/judges",
+    response_model=AdminJudgeWorkloadListResponse,
+)(list_admin_judges)
 
 # ------------------------------------------------------------------
 # Judging Criteria
