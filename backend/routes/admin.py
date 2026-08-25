@@ -42,8 +42,8 @@ from handlers.hackathon_member import (
 
 
 from handlers.judge_assignment import (
-    JudgeAssignmentResponse,
-    JudgeAssignmentListResponse,
+    AdminJudgeAssignmentResponse,
+    AdminJudgeAssignmentListResponse,
     CreateJudgeAssignmentPayload,
     UpdateJudgeAssignmentPayload,
     create_judge_assignment,
@@ -206,17 +206,17 @@ router.delete(
 
 router.post(
     "/hackathons/{hackathon_uuid}/judge-assignments",
-    response_model=JudgeAssignmentResponse,
+    response_model=AdminJudgeAssignmentResponse,
 )(create_judge_assignment)
 
 router.get(
     "/hackathons/{hackathon_uuid}/judge-assignments",
-    response_model=JudgeAssignmentListResponse,
+    response_model=AdminJudgeAssignmentListResponse,
 )(list_judge_assignments)
 
 router.patch(
     "/hackathons/{hackathon_uuid}/judge-assignments/{assignment_uuid}",
-    response_model=JudgeAssignmentResponse,
+    response_model=AdminJudgeAssignmentResponse,
 )(update_judge_assignment)
 
 router.delete(
