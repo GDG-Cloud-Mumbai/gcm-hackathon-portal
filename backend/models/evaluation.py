@@ -1,8 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
-from uuid6 import uuid7
+from pydantic import BaseModel, Field
 
 
 class EvaluationStatus(str, Enum):
@@ -26,11 +25,15 @@ class Evaluation(BaseModel):
 
     # Parent references.
     hackathon_uuid: str
+    assignment_uuid: str
     submission_uuid: str
     judge_uuid: str
 
     # Individual scores for each judging criterion.
-    criterion_scores: list[CriterionScore] = []
+    # default_factory avoids using a shared mutable list between instances.
+    criterion_scores: list[CriterionScore] = Field(
+        default_factory=list
+    )
 
     # Automatically calculated total score.
     # This should normally be the sum of all criterion scores.

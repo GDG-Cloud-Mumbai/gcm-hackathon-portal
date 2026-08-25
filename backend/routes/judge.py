@@ -5,6 +5,7 @@ from handlers.judge import (
     EvaluationResponse,
     JudgeAssignmentDetailResponse,
     JudgeAssignmentListResponse,
+    get_evaluation,
     get_judge_assignment,
     list_judge_assignments,
     submit_evaluation,
@@ -22,12 +23,14 @@ router = APIRouter(
 # ------------------------------------------------------------------
 
 
+# List all assignments belonging to the current judge.
 router.get(
     "/assignments",
     response_model=JudgeAssignmentListResponse,
 )(list_judge_assignments)
 
 
+# Get a specific assignment and its submission details.
 router.get(
     "/assignments/{assignment_uuid}",
     response_model=JudgeAssignmentDetailResponse,
@@ -39,7 +42,15 @@ router.get(
 # ------------------------------------------------------------------
 
 
+# Submit a completed evaluation for an assignment.
 router.post(
     "/assignments/{assignment_uuid}/evaluation",
     response_model=EvaluationResponse,
 )(submit_evaluation)
+
+
+# Get the evaluation submitted for a specific assignment.
+router.get(
+    "/assignments/{assignment_uuid}/evaluation",
+    response_model=EvaluationResponse,
+)(get_evaluation)

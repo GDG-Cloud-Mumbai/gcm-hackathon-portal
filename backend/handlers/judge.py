@@ -258,6 +258,7 @@ class EvaluationResponse(BaseModel):
 
     # Parent references.
     hackathon_uuid: str
+    assignment_uuid: str
     submission_uuid: str
     judge_uuid: str
 
@@ -277,7 +278,6 @@ class EvaluationResponse(BaseModel):
     created_at: Any | None = None
     updated_at: Any | None = None
     completed_at: Any | None = None
-
 
 # ------------------------------------------------------------------
 # Evaluation Helpers
@@ -309,31 +309,37 @@ def _evaluation_collection(db: Database[Any]) -> Any:
     return db["evaluations"]
 
 
+# ------------------------------------------------------------------
+# Evaluation Helpers
+# ------------------------------------------------------------------
+
 def _get_evaluation_by_assignment(
     *,
     assignment: JudgeAssignment,
     db: Database[Any],
 ) -> dict[str, Any] | None:
     """
-    Find an existing evaluation for this judge assignment.
+    Find the evaluation belonging to a specific judge assignment.
 
-    An evaluation belongs to a specific judge, submission,
-    and hackathon combination.
+    assignment_uuid is the direct relationship between an evaluation
+    and the assignment that produced it.
     """
-
     return _evaluation_collection(db).find_one(
         {
-            "hackathon_uuid": assignment.hackathon_uuid,
-            "submission_uuid": assignment.submission_uuid,
-            "judge_uuid": assignment.judge_uuid,
+            "assignment_uuid": assignment.uuid,
         }
     )
+
 
 def _build_evaluation_response(
     evaluation: dict[str, Any],
 ) -> EvaluationResponse:
-    """Convert a MongoDB evaluation document into an API response."""
+    """
+    Convert a MongoDB evaluation document into the public API response.
+    """
 
+    # Convert the stored criterion score documents into Pydantic
+    # response objects.
     criterion_scores = [
         EvaluationCriterionScoreResponse(
             criterion_uuid=item["criterion_uuid"],
@@ -345,6 +351,7 @@ def _build_evaluation_response(
     return EvaluationResponse(
         uuid=evaluation["uuid"],
         hackathon_uuid=evaluation["hackathon_uuid"],
+        assignment_uuid=evaluation["assignment_uuid"],
         submission_uuid=evaluation["submission_uuid"],
         judge_uuid=evaluation["judge_uuid"],
         criterion_scores=criterion_scores,
@@ -572,28 +579,42 @@ def submit_evaluation(
     now = datetime.now()
 
     evaluation = {
-        "uuid": str(uuid7()),
-        "hackathon_uuid": assignment.hackathon_uuid,
-        "submission_uuid": assignment.submission_uuid,
-        "judge_uuid": current_user.uuid,
+    # Generate a unique public identifier for the evaluation.
+    "uuid": str(uuid7()),
 
-        # Store the individual criterion scores.
-        "criterion_scores": criterion_scores,
+    # Link the evaluation to the hackathon.
+    "hackathon_uuid": assignment.hackathon_uuid,
 
-        # Store the calculated total.
-        "score": total_score,
+    # Link the evaluation directly to the judge assignment.
+    "assignment_uuid": assignment.uuid,
 
-        "feedback": (
-            payload.feedback.strip()
-            if payload.feedback
-            else None
-        ),
+    # Link the evaluation to the submitted project.
+    "submission_uuid": assignment.submission_uuid,
 
-        "status": "completed",
-        "created_at": now,
-        "updated_at": now,
-        "completed_at": now,
-    }
+    # Store the judge who performed the evaluation.
+    "judge_uuid": current_user.uuid,
+
+    # Store the individual criterion scores.
+    "criterion_scores": criterion_scores,
+
+    # Store the automatically calculated total score.
+    "score": total_score,
+
+    # Store optional feedback from the judge.
+    "feedback": (
+        payload.feedback.strip()
+        if payload.feedback
+        else None
+    ),
+
+    # Mark the evaluation as completed.
+    "status": "completed",
+
+    # Store audit timestamps.
+    "created_at": now,
+    "updated_at": now,
+    "completed_at": now,
+}
 
     _evaluation_collection(db).insert_one(evaluation)
 
@@ -616,3 +637,82 @@ def submit_evaluation(
     )
 
     return _build_evaluation_response(evaluation)
+
+# ------------------------------------------------------------------
+# Get Judge Evaluation Endpoint
+# ------------------------------------------------------------------
+
+def get_evaluation(
+    assignment_uuid: str,
+    current_user: UserPrivate = Depends(get_current_user),
+    db: Database[Any] = Depends(get_db),
+) -> EvaluationResponse:
+    """
+    Get the evaluation for a judge assignment.
+
+    A judge can only view the evaluation belonging to their own
+    assignment.
+    """
+
+    # --------------------------------------------------------------
+    # Find the assignment
+    # --------------------------------------------------------------
+
+    assignment_document = _assignment_collection(db).find_one(
+        {
+            "uuid": assignment_uuid,
+        }
+    )
+
+    if assignment_document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Judge assignment not found",
+        )
+
+    assignment = _build_assignment_from_document(
+        assignment_document
+    )
+
+    # --------------------------------------------------------------
+    # Authorization
+    # --------------------------------------------------------------
+
+    # Prevent a judge from viewing another judge's assignment.
+    if assignment.judge_uuid != current_user.uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not assigned to this submission",
+        )
+
+    # Make sure the user is still registered as a judge
+    # for this hackathon.
+    _ensure_judge(
+        hackathon_uuid=assignment.hackathon_uuid,
+        user_uuid=current_user.uuid,
+        db=db,
+    )
+
+    # --------------------------------------------------------------
+    # Find the evaluation
+    # --------------------------------------------------------------
+
+    evaluation = _get_evaluation_by_assignment(
+        assignment=assignment,
+        db=db,
+    )
+
+    # An assignment can exist before the judge has submitted
+    # their evaluation.
+    if evaluation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evaluation not found",
+        )
+
+    # --------------------------------------------------------------
+    # Return the evaluation
+    # --------------------------------------------------------------
+
+    return _build_evaluation_response(evaluation)
+
