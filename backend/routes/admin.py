@@ -73,6 +73,11 @@ from handlers.admin_dashboard import (
     get_admin_dashboard,
 )
 
+from handlers.admin_judging import (
+    AdminJudgingResponse,
+    get_admin_judging,
+)
+
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
@@ -256,6 +261,14 @@ router.get(
     response_model=AdminDashboardResponse,
 )(get_admin_dashboard)
 
+# ------------------------------------------------------------------
+# Admin Judging Dashboard
+# ------------------------------------------------------------------
+
+router.get(
+    "/hackathons/{hackathon_uuid}/judging",
+    response_model=AdminJudgingResponse,
+)(get_admin_judging)
 
 # ------------------------------------------------------------------
 # Judging Criteria
