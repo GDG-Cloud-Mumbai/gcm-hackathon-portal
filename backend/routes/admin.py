@@ -61,6 +61,18 @@ from handlers.judging_criteria import (
     JudgingCriterionListResponse,
 )
 
+from handlers.admin_submission import (
+    AdminSubmissionListResponse,
+    AdminSubmissionResponse,
+    get_admin_submission,
+    list_admin_submissions,
+)
+
+from handlers.admin_dashboard import (
+    AdminDashboardResponse,
+    get_admin_dashboard,
+)
+
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
@@ -205,6 +217,45 @@ router.patch(
 router.delete(
     "/hackathons/{hackathon_uuid}/judge-assignments/{assignment_uuid}",
 )(delete_judge_assignment)
+
+
+# ------------------------------------------------------------------
+# Submission Management
+# ------------------------------------------------------------------
+
+
+# List all submissions for a hackathon.
+#
+# Optional filters:
+#   ?status=submitted
+#   ?track_uuid=<track UUID>
+router.get(
+    "/hackathons/{hackathon_uuid}/submissions",
+    response_model=AdminSubmissionListResponse,
+)(list_admin_submissions)
+
+
+# Get details for a specific submission.
+router.get(
+    "/hackathons/{hackathon_uuid}/submissions/{submission_uuid}",
+    response_model=AdminSubmissionResponse,
+)(get_admin_submission)
+
+
+# ------------------------------------------------------------------
+# Admin Dashboard
+# ------------------------------------------------------------------
+
+
+# Return aggregated metrics for the hackathon admin dashboard.
+#
+# Keeping these metrics in a single endpoint allows the frontend
+# dashboard to load its overview without making multiple requests.
+router.get(
+    "/hackathons/{hackathon_uuid}/dashboard",
+    response_model=AdminDashboardResponse,
+)(get_admin_dashboard)
+
 
 # ------------------------------------------------------------------
 # Judging Criteria
