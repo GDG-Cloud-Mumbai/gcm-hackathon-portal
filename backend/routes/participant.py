@@ -32,6 +32,14 @@ from handlers.participant import (
     cancel_invitation,
     UserSearchItem,
     search_users,
+    ParticipantHackathonListResponse,
+    list_active_hackathons,
+    ParticipantHackathonHistoryResponse,
+    list_participated_hackathons,
+    ParticipantHackathonDetailResponse,
+    get_participant_hackathon,
+    ParticipantTrackListResponse,
+    list_participant_tracks,
 )
 
 router = APIRouter(
@@ -44,6 +52,25 @@ router = APIRouter(
 def ping():
     return {"message": "participants route working"}
 
+router.get(
+    "/hackathons",
+    response_model=ParticipantHackathonListResponse,
+)(list_active_hackathons)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/tracks",
+    response_model=ParticipantTrackListResponse,
+)(list_participant_tracks)
+
+router.get(
+    "/hackathons/{hackathon_uuid}",
+    response_model=ParticipantHackathonDetailResponse,
+)(get_participant_hackathon)
+
+router.get(
+    "/hackathons/history",
+    response_model=ParticipantHackathonHistoryResponse,
+)(list_participated_hackathons)
 
 router.post(
     "/teams",
