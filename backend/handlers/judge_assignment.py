@@ -50,6 +50,46 @@ class JudgeAssignmentListResponse(BaseModel):
     assignments: list[JudgeAssignmentResponse]
 
 
+class AdminJudgeResponse(BaseModel):
+    """Judge information exposed to administrators."""
+
+    uuid: str
+    name: str | None = None
+    email: str
+
+
+class AdminJudgeSubmissionResponse(BaseModel):
+    """Submission information exposed to administrators."""
+
+    uuid: str
+    title: str
+    team_uuid: str
+    team_name: str | None = None
+    track_uuid: str
+    track_name: str | None = None
+
+
+class AdminJudgeAssignmentResponse(BaseModel):
+    """Detailed judge assignment information for administrators."""
+
+    uuid: str
+    hackathon_uuid: str
+
+    judge: AdminJudgeResponse
+    submission: AdminJudgeSubmissionResponse
+
+    status: JudgeAssignmentStatus
+
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class AdminJudgeAssignmentListResponse(BaseModel):
+    """List of detailed judge assignments for administrators."""
+
+    assignments: list[AdminJudgeAssignmentResponse]
+
 # ------------------------------------------------------------------
 # Helper Functions
 # ------------------------------------------------------------------
@@ -83,6 +123,20 @@ def _hackathon_member_collection(db: Database[Any]) -> Any:
 def _team_member_collection(db: Database[Any]) -> Any:
     """Return the team members collection."""
     return db["team_members"]
+
+def _user_collection(db: Database[Any]) -> Any:
+    """Return the users collection."""
+    return db["users"]
+
+
+def _team_collection(db: Database[Any]) -> Any:
+    """Return the teams collection."""
+    return db["teams"]
+
+
+def _track_collection(db: Database[Any]) -> Any:
+    """Return the tracks collection."""
+    return db["tracks"]
 
 
 def _authorize_admin(current_user: UserPrivate) -> None:
@@ -261,6 +315,81 @@ def _build_assignment_from_document(
 
     return JudgeAssignment(**document)
 
+def _build_admin_assignment_response(
+    assignment: JudgeAssignment,
+    db: Database[Any],
+) -> AdminJudgeAssignmentResponse:
+    """Build a detailed assignment response for administrators."""
+
+    judge = _user_collection(db).find_one(
+        {
+            "uuid": assignment.judge_uuid,
+        }
+    )
+
+    if judge is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Judge user not found",
+        )
+
+    submission = _submission_collection(db).find_one(
+        {
+            "uuid": assignment.submission_uuid,
+            "hackathon_uuid": assignment.hackathon_uuid,
+        }
+    )
+
+    if submission is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found",
+        )
+
+    team = _team_collection(db).find_one(
+        {
+            "uuid": submission["team_uuid"],
+            "hackathon_uuid": assignment.hackathon_uuid,
+        }
+    )
+
+    track = _track_collection(db).find_one(
+        {
+            "uuid": submission["track_uuid"],
+            "hackathon_uuid": assignment.hackathon_uuid,
+        }
+    )
+
+    return AdminJudgeAssignmentResponse(
+        uuid=assignment.uuid,
+        hackathon_uuid=assignment.hackathon_uuid,
+        judge=AdminJudgeResponse(
+            uuid=judge["uuid"],
+            name=judge.get("name"),
+            email=judge.get("email", ""),
+        ),
+        submission=AdminJudgeSubmissionResponse(
+            uuid=submission["uuid"],
+            title=submission["title"],
+            team_uuid=submission["team_uuid"],
+            team_name=(
+                team.get("name")
+                if team is not None
+                else None
+            ),
+            track_uuid=submission["track_uuid"],
+            track_name=(
+                track.get("name")
+                if track is not None
+                else None
+            ),
+        ),
+        status=assignment.status,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+        completed_at=assignment.completed_at,
+    )
+
 
 # ------------------------------------------------------------------
 # Endpoints
@@ -272,7 +401,7 @@ async def create_judge_assignment(
     payload: CreateJudgeAssignmentPayload,
     db: Database[Any] = Depends(get_db),
     current_user: UserPrivate = Depends(get_current_user),
-) -> JudgeAssignmentResponse:
+) -> AdminJudgeAssignmentResponse:
     """Assign a judge to a submission."""
 
     _authorize_admin(current_user)
@@ -329,14 +458,17 @@ async def create_judge_assignment(
         assignment.model_dump(exclude={"_id"})
     )
 
-    return _build_assignment_response(assignment)
+    return _build_admin_assignment_response(
+    assignment,
+    db,
+    )
 
 
 async def list_judge_assignments(
     hackathon_uuid: str,
     db: Database[Any] = Depends(get_db),
     current_user: UserPrivate = Depends(get_current_user),
-) -> JudgeAssignmentListResponse:
+) -> AdminJudgeAssignmentListResponse:
     """List all judge assignments for a hackathon."""
 
     _authorize_admin(current_user)
@@ -353,14 +485,15 @@ async def list_judge_assignments(
     )
 
     assignment_items = [
-        _build_assignment_response(
-            _build_assignment_from_document(assignment)
-        )
-        for assignment in assignments
+    _build_admin_assignment_response(
+        _build_assignment_from_document(assignment),
+        db,
+    )
+    for assignment in assignments
     ]
 
-    return JudgeAssignmentListResponse(
-        assignments=assignment_items,
+    return AdminJudgeAssignmentListResponse(
+    assignments=assignment_items,  
     )
 
 
@@ -370,7 +503,7 @@ async def update_judge_assignment(
     payload: UpdateJudgeAssignmentPayload,
     db: Database[Any] = Depends(get_db),
     current_user: UserPrivate = Depends(get_current_user),
-) -> JudgeAssignmentResponse:
+) -> AdminJudgeAssignmentResponse:
     """Update the status of a judge assignment."""
 
     _authorize_admin(current_user)
@@ -421,8 +554,9 @@ async def update_judge_assignment(
 
     assignment.update(update_fields)
 
-    return _build_assignment_response(
-        _build_assignment_from_document(assignment)
+    return _build_admin_assignment_response(
+    _build_assignment_from_document(assignment),
+    db,
     )
 
 
@@ -436,11 +570,22 @@ async def delete_judge_assignment(
 
     _authorize_admin(current_user)
 
-    _get_assignment_by_uuid(
+    assignment = _get_assignment_by_uuid(
         assignment_uuid=assignment_uuid,
         hackathon_uuid=hackathon_uuid,
         db=db,
     )
+
+    # Completed assignments must be preserved because their
+    # evaluations depend on the assignment.
+    if (
+        assignment.get("status")
+        == JudgeAssignmentStatus.COMPLETED.value
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed judge assignments cannot be deleted",
+        )
 
     _assignment_collection(db).delete_one(
         {
@@ -450,7 +595,7 @@ async def delete_judge_assignment(
     )
 
     return {
-        "message": "Judge assignment removed successfully"
+        "message": "Judge assignment removed successfully",
     }
 
 # ------------------------------------------------------------------

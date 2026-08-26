@@ -42,14 +42,19 @@ from handlers.hackathon_member import (
 
 
 from handlers.judge_assignment import (
-    JudgeAssignmentResponse,
-    JudgeAssignmentListResponse,
+    AdminJudgeAssignmentResponse,
+    AdminJudgeAssignmentListResponse,
     CreateJudgeAssignmentPayload,
     UpdateJudgeAssignmentPayload,
     create_judge_assignment,
     list_judge_assignments,
     update_judge_assignment,
     delete_judge_assignment,
+)
+
+from handlers.admin_judges import (
+    AdminJudgeWorkloadListResponse,
+    list_admin_judges,
 )
 
 from handlers.judging_criteria import (
@@ -59,6 +64,23 @@ from handlers.judging_criteria import (
     delete_judging_criterion,
     JudgingCriterionResponse,
     JudgingCriterionListResponse,
+)
+
+from handlers.admin_submission import (
+    AdminSubmissionListResponse,
+    AdminSubmissionResponse,
+    get_admin_submission,
+    list_admin_submissions,
+)
+
+from handlers.admin_dashboard import (
+    AdminDashboardResponse,
+    get_admin_dashboard,
+)
+
+from handlers.admin_judging import (
+    AdminJudgingResponse,
+    get_admin_judging,
 )
 
 router = APIRouter(
@@ -189,22 +211,74 @@ router.delete(
 
 router.post(
     "/hackathons/{hackathon_uuid}/judge-assignments",
-    response_model=JudgeAssignmentResponse,
+    response_model=AdminJudgeAssignmentResponse,
 )(create_judge_assignment)
 
 router.get(
     "/hackathons/{hackathon_uuid}/judge-assignments",
-    response_model=JudgeAssignmentListResponse,
+    response_model=AdminJudgeAssignmentListResponse,
 )(list_judge_assignments)
 
 router.patch(
     "/hackathons/{hackathon_uuid}/judge-assignments/{assignment_uuid}",
-    response_model=JudgeAssignmentResponse,
+    response_model=AdminJudgeAssignmentResponse,
 )(update_judge_assignment)
 
 router.delete(
     "/hackathons/{hackathon_uuid}/judge-assignments/{assignment_uuid}",
 )(delete_judge_assignment)
+
+
+# ------------------------------------------------------------------
+# Submission Management
+# ------------------------------------------------------------------
+
+
+# List all submissions for a hackathon.
+#
+# Optional filters:
+#   ?status=submitted
+#   ?track_uuid=<track UUID>
+router.get(
+    "/hackathons/{hackathon_uuid}/submissions",
+    response_model=AdminSubmissionListResponse,
+)(list_admin_submissions)
+
+
+# Get details for a specific submission.
+router.get(
+    "/hackathons/{hackathon_uuid}/submissions/{submission_uuid}",
+    response_model=AdminSubmissionResponse,
+)(get_admin_submission)
+
+
+# ------------------------------------------------------------------
+# Admin Dashboard
+# ------------------------------------------------------------------
+
+
+# Return aggregated metrics for the hackathon admin dashboard.
+#
+# Keeping these metrics in a single endpoint allows the frontend
+# dashboard to load its overview without making multiple requests.
+router.get(
+    "/hackathons/{hackathon_uuid}/dashboard",
+    response_model=AdminDashboardResponse,
+)(get_admin_dashboard)
+
+# ------------------------------------------------------------------
+# Admin Judging Dashboard
+# ------------------------------------------------------------------
+
+router.get(
+    "/hackathons/{hackathon_uuid}/judging",
+    response_model=AdminJudgingResponse,
+)(get_admin_judging)
+
+router.get(
+    "/hackathons/{hackathon_uuid}/judges",
+    response_model=AdminJudgeWorkloadListResponse,
+)(list_admin_judges)
 
 # ------------------------------------------------------------------
 # Judging Criteria
