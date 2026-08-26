@@ -6,6 +6,8 @@ import type { ParticipantSearchResult } from "@/lib/types";
 type Props = {
   teamUuid: string;
   currentUserUuid?: string;
+  isPast?: boolean;
+  isAdmin?: boolean;
 };
 
 type SearchState =
@@ -24,7 +26,7 @@ type InviteState =
 const INPUT =
   "h-11 w-full rounded-xl border border-white/10 bg-black px-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10";
 
-export function InviteSearch({ teamUuid, currentUserUuid }: Props) {
+export function InviteSearch({ teamUuid, currentUserUuid, isPast = false, isAdmin = false }: Props) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<SearchState>({ status: "idle" });
   const [inviteStates, setInviteStates] = useState<Record<string, InviteState>>({});
@@ -109,8 +111,9 @@ export function InviteSearch({ teamUuid, currentUserUuid }: Props) {
             type="email"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by email…"
+            placeholder={isPast || isAdmin ? "Invitations are closed" : "Search by email…"}
             autoComplete="off"
+            disabled={isPast || isAdmin}
           />
           {search.status === "searching" && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -151,7 +154,7 @@ export function InviteSearch({ teamUuid, currentUserUuid }: Props) {
                     </div>
                     <button
                       onClick={() => handleInvite(p)}
-                      disabled={s.status !== "idle"}
+                      disabled={s.status !== "idle" || isPast || isAdmin}
                       className={`h-8 shrink-0 rounded-full px-3 text-xs font-medium transition disabled:cursor-not-allowed ${
                         s.status === "sent"
                           ? "border border-[#34A853]/20 bg-[#34A853]/10 text-[#81c784]"

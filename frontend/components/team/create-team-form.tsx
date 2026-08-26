@@ -13,10 +13,11 @@ const INPUT =
   "h-11 w-full rounded-xl border border-white/10 bg-black px-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10";
 
 export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
-  const singleTrack = hackathon.tracks.length === 1;
+  const singleTrack = hackathon.tracks.length <= 1;
+  const defaultTrack = hackathon.tracks.length > 0 ? hackathon.tracks[0].track_uuid : "general";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [trackUuid, setTrackUuid] = useState(singleTrack ? hackathon.tracks[0].track_uuid : "");
+  const [trackUuid, setTrackUuid] = useState(defaultTrack);
   const [requiredSkills, setRequiredSkills] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -100,7 +101,7 @@ export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
       )}
       {singleTrack && (
         <p className="text-xs text-white/30">
-          Track: <span className="text-white/50">{hackathon.tracks[0].name}</span>
+          Track: <span className="text-white/50">{hackathon.tracks[0]?.name ?? "General Track"}</span>
         </p>
       )}
 

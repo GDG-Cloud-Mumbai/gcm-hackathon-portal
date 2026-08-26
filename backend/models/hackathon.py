@@ -28,10 +28,6 @@ class Hackathon(BaseModel):
     name: str
     description: str | None = None
 
-    # Branding
-    logo_url: str | None = None
-    banner_url: str | None = None
-
     # Event timezone
     timezone: str = "Asia/Kolkata"
 

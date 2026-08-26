@@ -6,9 +6,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type Props = {
   teamUuid: string;
+  isPast?: boolean;
+  isAdmin?: boolean;
 };
 
-export function JoinRequestsPanel({ teamUuid }: Props) {
+export function JoinRequestsPanel({ teamUuid, isPast = false, isAdmin = false }: Props) {
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -92,22 +94,24 @@ export function JoinRequestsPanel({ teamUuid }: Props) {
                   <p className="text-xs text-white/30">@{req.user.username}</p>
                 )}
               </div>
-              <div className="flex shrink-0 gap-2">
-                <button
-                  onClick={() => handleAction(req.request_id, "reject")}
-                  disabled={actionLoading === req.request_id}
-                  className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/50 transition hover:border-[#f28b82]/20 hover:text-[#f28b82] disabled:opacity-40"
-                >
-                  Reject
-                </button>
-                <button
-                  onClick={() => handleAction(req.request_id, "approve")}
-                  disabled={actionLoading === req.request_id}
-                  className="h-8 rounded-full bg-white px-3 text-xs font-medium text-black transition hover:bg-zinc-100 disabled:opacity-40"
-                >
-                  {actionLoading === req.request_id ? "…" : "Approve"}
-                </button>
-              </div>
+              {!isPast && !isAdmin && (
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => handleAction(req.request_id, "reject")}
+                    disabled={actionLoading === req.request_id}
+                    className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/50 transition hover:border-[#f28b82]/20 hover:text-[#f28b82] disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => handleAction(req.request_id, "approve")}
+                    disabled={actionLoading === req.request_id}
+                    className="h-8 rounded-full bg-white px-3 text-xs font-medium text-black transition hover:bg-zinc-100 disabled:opacity-40"
+                  >
+                    {actionLoading === req.request_id ? "…" : "Approve"}
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

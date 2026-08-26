@@ -8,6 +8,8 @@ type Props = {
   team: MyTeam;
   currentUserUuid: string;
   onRefresh: () => void;
+  isPast?: boolean;
+  isAdmin?: boolean;
 };
 
 type PendingAction =
@@ -15,7 +17,7 @@ type PendingAction =
   | { type: "remove"; member: TeamMember }
   | { type: "transfer"; member: TeamMember };
 
-export function MembersList({ team, currentUserUuid, onRefresh }: Props) {
+export function MembersList({ team, currentUserUuid, onRefresh, isPast = false, isAdmin = false }: Props) {
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
@@ -152,43 +154,47 @@ export function MembersList({ team, currentUserUuid, onRefresh }: Props) {
                     </span>
                   )}
 
-                  {/* Current user is member (not leader): can leave */}
-                  {isMe && !member.is_leader && (
-                    <button
-                      onClick={() => setPending({ type: "leave" })}
-                      className="text-xs text-white/30 transition hover:text-[#f28b82]"
-                    >
-                      Leave
-                    </button>
-                  )}
-
-                  {/* Current user is leader with no other members: can leave (dissolves team) */}
-                  {isMe && member.is_leader && canLeaderLeave && (
-                    <button
-                      onClick={() => setPending({ type: "leave" })}
-                      className="text-xs text-white/30 transition hover:text-[#f28b82]"
-                    >
-                      Leave
-                    </button>
-                  )}
-
-                  {/* Leader actions on other members */}
-                  {team.is_leader && !isMe && (
+                  {!isPast && !isAdmin && (
                     <>
-                      <button
-                        onClick={() =>
-                          setPending({ type: "transfer", member })
-                        }
-                        className="text-xs text-white/30 transition hover:text-[#8ab4f8]"
-                      >
-                        Make Leader
-                      </button>
-                      <button
-                        onClick={() => setPending({ type: "remove", member })}
-                        className="text-xs text-white/30 transition hover:text-[#f28b82]"
-                      >
-                        Remove
-                      </button>
+                      {/* Current user is member (not leader): can leave */}
+                      {isMe && !member.is_leader && (
+                        <button
+                          onClick={() => setPending({ type: "leave" })}
+                          className="text-xs text-white/30 transition hover:text-[#f28b82]"
+                        >
+                          Leave
+                        </button>
+                      )}
+
+                      {/* Current user is leader with no other members: can leave (dissolves team) */}
+                      {isMe && member.is_leader && canLeaderLeave && (
+                        <button
+                          onClick={() => setPending({ type: "leave" })}
+                          className="text-xs text-white/30 transition hover:text-[#f28b82]"
+                        >
+                          Leave
+                        </button>
+                      )}
+
+                      {/* Leader actions on other members */}
+                      {team.is_leader && !isMe && (
+                        <>
+                          <button
+                            onClick={() =>
+                              setPending({ type: "transfer", member })
+                            }
+                            className="text-xs text-white/30 transition hover:text-[#8ab4f8]"
+                          >
+                            Make Leader
+                          </button>
+                          <button
+                            onClick={() => setPending({ type: "remove", member })}
+                            className="text-xs text-white/30 transition hover:text-[#f28b82]"
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

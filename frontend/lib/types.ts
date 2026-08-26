@@ -95,9 +95,12 @@ export type Hackathon = {
   name: string;
   tagline: string;
   description: string;
+  backend_status?: string;
   status: HackathonStatus;
   starts_at: string;
   ends_at: string;
+  registration_start?: string;
+  registration_end?: string;
   registration_open: boolean;
   max_team_size: number;
   min_team_size: number;

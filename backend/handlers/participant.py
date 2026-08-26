@@ -30,6 +30,50 @@ def _generate_team_code(length: int = 6) -> str:
     )
 
 
+def _is_hackathon_past(hackathon: dict[str, Any]) -> bool:
+    if not hackathon:
+        return True
+    status_str = str(hackathon.get("status", "")).lower()
+    if status_str in {"completed", "archived"}:
+        return True
+
+    now = _utcnow()
+    for key in ("event_end", "submission_deadline"):
+        val = hackathon.get(key)
+        dt = None
+        if isinstance(val, datetime):
+            dt = val
+        elif isinstance(val, str):
+            try:
+                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            except Exception:
+                pass
+        if dt:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if now > dt:
+                return True
+
+    return False
+
+
+def _ensure_hackathon_not_past(hackathon: dict[str, Any]) -> None:
+    if _is_hackathon_past(hackathon):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This hackathon has ended. Team modifications are locked.",
+        )
+
+
+def _ensure_not_admin(user: UserPrivate) -> None:
+    if user.global_role and user.global_role.name in {"admin", "superadmin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrators cannot participate in hackathons or create/join teams.",
+        )
+
+
+
 class CreateTeamPayload(BaseModel):
     hackathon_uuid: str
     track_uuid: str
@@ -357,6 +401,16 @@ def create_team(
     current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
 ) -> TeamResponse:
+    _ensure_not_admin(current_user)
+
+    hackathon = db.hackathons.find_one({"uuid": payload.hackathon_uuid})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     team_name = payload.name.strip()
 
     if not team_name:
@@ -452,6 +506,7 @@ def join_team(
     current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
 ) -> JoinRequestResponse:
+    _ensure_not_admin(current_user)
 
     # Ensure the target team exists.
     team = db.teams.find_one({"uuid": team_uuid})
@@ -461,6 +516,14 @@ def join_team(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Team not found",
         )
+
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
 
     # Team leaders cannot create join requests for their own teams.
     if team["leader_uuid"] == current_user.uuid:
@@ -659,6 +722,14 @@ def approve_join_request(
             detail="Team not found",
         )
 
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     # Only the team leader can approve requests.
     if team["leader_uuid"] != current_user.uuid:
         raise HTTPException(
@@ -802,6 +873,14 @@ def reject_join_request(
             detail="Team not found",
         )
 
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     # Only the team leader can reject requests.
     if team["leader_uuid"] != current_user.uuid:
         raise HTTPException(
@@ -868,6 +947,14 @@ def create_invitation(
             detail="Team not found",
         )
 
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     # Only team leaders can send invitations.
     if team["leader_uuid"] != current_user.uuid:
         raise HTTPException(
@@ -884,6 +971,12 @@ def create_invitation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
+        )
+
+    if target_user.get("global_role", {}).get("name") in {"admin", "superadmin"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrators cannot participate in hackathons or create/join teams.",
         )
 
     # Leader cannot invite themselves.
@@ -1008,6 +1101,7 @@ def accept_invitation(
     current_user: UserPrivate = Depends(get_current_user),
     db: Database[Any] = Depends(get_db),
 ) -> InvitationResponse:
+    _ensure_not_admin(current_user)
 
     # Ensure invitation exists.
     invitation = db.team_invitations.find_one(
@@ -1043,6 +1137,14 @@ def accept_invitation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Team not found",
         )
+
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
 
     # Ensure user is not already part of a team
     # in this hackathon.
@@ -1172,6 +1274,21 @@ def decline_invitation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invitation not found",
         )
+
+    team = db.teams.find_one({"uuid": invitation["team_uuid"]})
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found",
+        )
+
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
 
     if invitation["user_uuid"] != current_user.uuid:
         raise HTTPException(
@@ -1340,6 +1457,14 @@ def leave_team(
             detail="Team not found",
         )
 
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     membership = db.team_members.find_one(
         {
             "team_uuid": team_uuid,
@@ -1412,6 +1537,14 @@ def transfer_leadership(
             detail="Team not found",
         )
 
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     if team["leader_uuid"] != current_user.uuid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -1478,6 +1611,14 @@ def remove_member(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Team not found",
         )
+
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
 
     if team["leader_uuid"] != current_user.uuid:
         raise HTTPException(
@@ -1552,6 +1693,14 @@ def cancel_invitation(
             detail="Team not found",
         )
 
+    hackathon = db.hackathons.find_one({"uuid": team["hackathon_uuid"]})
+    if not hackathon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hackathon not found",
+        )
+    _ensure_hackathon_not_past(hackathon)
+
     if team["leader_uuid"] != current_user.uuid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -1598,7 +1747,10 @@ def search_users(
     pattern = f"^{re.escape(email.strip())}"
 
     cursor = db.users.find(
-        {"email": {"$regex": pattern, "$options": "i"}},
+        {
+            "email": {"$regex": pattern, "$options": "i"},
+            "global_role.name": {"$nin": ["admin", "superadmin"]},
+        },
         {"_id": 0, "uuid": 1, "name": 1, "username": 1, "email": 1},
     ).limit(10)
 

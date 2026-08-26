@@ -6,9 +6,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type Props = {
   onAccepted: () => void;
+  isPast?: boolean;
+  isAdmin?: boolean;
 };
 
-export function InvitationsPanel({ onAccepted }: Props) {
+export function InvitationsPanel({ onAccepted, isPast = false, isAdmin = false }: Props) {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -87,22 +89,24 @@ export function InvitationsPanel({ onAccepted }: Props) {
               <p className="text-sm font-medium text-white">{inv.team_name}</p>
               <p className="text-xs text-white/30">Team invitation</p>
             </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                onClick={() => handleAction(inv.invitation_id, "decline")}
-                disabled={actionLoading === inv.invitation_id}
-                className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/50 transition hover:text-[#f28b82] disabled:opacity-40"
-              >
-                Decline
-              </button>
-              <button
-                onClick={() => handleAction(inv.invitation_id, "accept")}
-                disabled={actionLoading === inv.invitation_id}
-                className="h-8 rounded-full bg-white px-3 text-xs font-medium text-black transition hover:bg-zinc-100 disabled:opacity-40"
-              >
-                {actionLoading === inv.invitation_id ? "…" : "Accept"}
-              </button>
-            </div>
+            {!isPast && !isAdmin && (
+              <div className="flex shrink-0 gap-2">
+                <button
+                  onClick={() => handleAction(inv.invitation_id, "decline")}
+                  disabled={actionLoading === inv.invitation_id}
+                  className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/50 transition hover:text-[#f28b82] disabled:opacity-40"
+                >
+                  Decline
+                </button>
+                <button
+                  onClick={() => handleAction(inv.invitation_id, "accept")}
+                  disabled={actionLoading === inv.invitation_id}
+                  className="h-8 rounded-full bg-white px-3 text-xs font-medium text-black transition hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  {actionLoading === inv.invitation_id ? "…" : "Accept"}
+                </button>
+              </div>
+            )}
           </li>
         ))}
       </ul>

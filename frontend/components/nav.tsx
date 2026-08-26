@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const primaryLinks = [
+const baseLinks = [
   { href: "/home", label: "Home" },
   { href: "/profile", label: "Profile" },
 ];
@@ -14,6 +14,25 @@ export function Nav() {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [navLinks, setNavLinks] = useState(baseLinks);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((user) => {
+        const role = user?.global_role?.name;
+        if (role === "admin" || role === "superadmin") {
+          setNavLinks([
+            { href: "/home", label: "Home" },
+            { href: "/admin", label: "Admin" },
+            { href: "/profile", label: "Profile" },
+          ]);
+        }
+      })
+      .catch(() => {
+        // Keep base links on fetch failure
+      });
+  }, []);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -52,7 +71,7 @@ export function Nav() {
           className="hidden items-center gap-1 md:flex"
           aria-label="Main navigation"
         >
-          {primaryLinks.map((link) => (
+          {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -114,7 +133,7 @@ export function Nav() {
       {mobileOpen && (
         <div className="border-t border-white/10 bg-black px-6 py-4 md:hidden">
           <nav className="space-y-1" aria-label="Mobile navigation">
-            {primaryLinks.map((link) => (
+            {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}

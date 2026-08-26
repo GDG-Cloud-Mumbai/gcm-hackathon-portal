@@ -35,10 +35,6 @@ class CreateHackathonPayload(BaseModel):
     name: str
     description: str | None = None
 
-    # Branding
-    logo_url: str | None = None
-    banner_url: str | None = None
-
     # Event timezone
     timezone: str = "Asia/Kolkata"
 
@@ -62,6 +58,8 @@ class CreateHackathonPayload(BaseModel):
 
     # Visibility
     is_public: bool = True
+
+
 
 
 # ------------------------------------------------------------------
@@ -102,9 +100,6 @@ class HackathonDetailResponse(BaseModel):
     name: str
     description: str | None = None
 
-    logo_url: str | None = None
-    banner_url: str | None = None
-
     timezone: str
 
     status: HackathonStatus
@@ -127,6 +122,9 @@ class HackathonDetailResponse(BaseModel):
 
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+
 
 
 # ------------------------------------------------------------------
@@ -175,42 +173,60 @@ def _validate_slug_format(slug: str) -> None:
         )
 
 
+def _ensure_utc_datetime(val: Any) -> datetime:
+    """Ensure a datetime object or ISO string is converted to UTC datetime."""
+    if isinstance(val, str):
+        val = datetime.fromisoformat(val.replace("Z", "+00:00"))
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            return val.replace(tzinfo=UTC)
+        return val.astimezone(UTC)
+    raise ValueError(f"Invalid datetime value: {val}")
+
+
 def _validate_timeline(
     *,
-    registration_start: datetime,
-    registration_end: datetime,
-    event_start: datetime,
-    event_end: datetime,
-    submission_start: datetime,
-    submission_deadline: datetime,
+    registration_start: datetime | str,
+    registration_end: datetime | str,
+    event_start: datetime | str,
+    event_end: datetime | str,
+    submission_start: datetime | str,
+    submission_deadline: datetime | str,
 ) -> None:
     """Validate hackathon timeline."""
 
-    if registration_start >= registration_end:
+    rs = _ensure_utc_datetime(registration_start)
+    re_dt = _ensure_utc_datetime(registration_end)
+    es = _ensure_utc_datetime(event_start)
+    ee = _ensure_utc_datetime(event_end)
+    ss = _ensure_utc_datetime(submission_start)
+    sd = _ensure_utc_datetime(submission_deadline)
+
+    if rs >= re_dt:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Registration start must be before registration end",
         )
 
-    if event_start >= event_end:
+    if es >= ee:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Event start must be before event end",
         )
 
-    if registration_end > event_start:
+    if re_dt > es:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Registration must end before the event starts",
         )
 
-    if submission_start > submission_deadline:
+    if ss > sd:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Submission start must be before submission deadline",
         )
 
-    if submission_deadline > event_end:
+    if sd > ee:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Submission deadline cannot be after the event ends",
@@ -529,8 +545,6 @@ def create_hackathon(
         slug=slug,
         name=payload.name,
         description=payload.description,
-        logo_url=payload.logo_url,
-        banner_url=payload.banner_url,
         timezone=payload.timezone,
         status=HackathonStatus.DRAFT,
         archived_from_status=None,
@@ -732,3 +746,6 @@ def publish_hackathon(
     )
 
     return _build_hackathon_response(hackathon)
+
+
+

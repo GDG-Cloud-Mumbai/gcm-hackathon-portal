@@ -10,9 +10,11 @@ type View = "choice" | "create" | "join";
 type Props = {
   hackathon: Hackathon;
   onTeamCreated: (team: TeamResponse) => void;
+  isPast?: boolean;
+  isAdmin?: boolean;
 };
 
-export function NoTeamView({ hackathon, onTeamCreated }: Props) {
+export function NoTeamView({ hackathon, onTeamCreated, isPast = false, isAdmin = false }: Props) {
   const [view, setView] = useState<View>("choice");
 
   return (
@@ -28,13 +30,18 @@ export function NoTeamView({ hackathon, onTeamCreated }: Props) {
                 You&apos;re not in a team yet
               </h2>
               <p className="mt-2 text-sm text-white/40">
-                Create a new team or join an existing one to get started.
+                {isAdmin
+                  ? "Administrators are excluded from participating in teams."
+                  : isPast
+                  ? "Team actions are closed."
+                  : "Create a new team or join an existing one to get started."}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setView("create")}
-                className="group flex h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-zinc-950 transition hover:border-white/20 hover:bg-zinc-900"
+                disabled={isPast || isAdmin}
+                className="group flex h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-zinc-950 transition hover:border-white/20 hover:bg-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="text-2xl">✨</span>
                 <span className="text-sm font-medium text-white/70 transition group-hover:text-white">
@@ -43,7 +50,8 @@ export function NoTeamView({ hackathon, onTeamCreated }: Props) {
               </button>
               <button
                 onClick={() => setView("join")}
-                className="group flex h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-zinc-950 transition hover:border-white/20 hover:bg-zinc-900"
+                disabled={isPast || isAdmin}
+                className="group flex h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-zinc-950 transition hover:border-white/20 hover:bg-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="text-2xl">🔗</span>
                 <span className="text-sm font-medium text-white/70 transition group-hover:text-white">

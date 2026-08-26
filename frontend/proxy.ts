@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { AUTH_COOKIE_NAME } from "@/lib/constants";
 
 type JwtPayload = {
   exp?: number;
@@ -90,8 +90,9 @@ export const config = {
     "/home/:path*",
     "/dashboard/:path*",
     "/profile/:path*",
+    "/hackathons/:path*",
     "/team/:path*",
     "/submissions/:path*",
     "/admin/:path*",
   ],
-};
+};

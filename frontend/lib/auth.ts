@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
+import { AUTH_COOKIE_NAME } from "@/lib/constants";
 
-export const AUTH_COOKIE_NAME = "gcm_access_token";
+export { AUTH_COOKIE_NAME };
 
 export type AuthUser = {
   email: string;
