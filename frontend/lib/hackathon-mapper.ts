@@ -1,23 +1,11 @@
-import type { Hackathon, HackathonStatus } from "@/lib/types";
+import type {
+  Hackathon,
+  HackathonStatus,
+  ParticipantHackathonDetail,
+  Track,
+} from "@/lib/types";
 
-export type BackendHackathon = {
-  uuid: string;
-  slug?: string;
-  name: string;
-  description?: string;
-  status: string;
-  registration_start?: string;
-  registration_end?: string;
-  event_start: string;
-  event_end: string;
-  submission_start?: string;
-  submission_deadline?: string;
-  min_team_size?: number;
-  max_team_size?: number;
-  is_public?: boolean;
-};
-
-function deriveStatus(doc: BackendHackathon): HackathonStatus {
+function deriveStatus(doc: ParticipantHackathonDetail): HackathonStatus {
   const now = Date.now();
   const eventStart = new Date(doc.event_start).getTime();
   const eventEnd = new Date(doc.event_end).getTime();
@@ -44,7 +32,10 @@ function deriveStatus(doc: BackendHackathon): HackathonStatus {
   return "upcoming";
 }
 
-export function mapBackendToHackathon(doc: BackendHackathon): Hackathon {
+export function mapParticipantHackathonToHackathon(
+  doc: ParticipantHackathonDetail,
+  tracks: Track[],
+): Hackathon {
   const now = Date.now();
   const regStart = doc.registration_start ? new Date(doc.registration_start).getTime() : null;
   const regEnd = doc.registration_end ? new Date(doc.registration_end).getTime() : null;
@@ -69,13 +60,8 @@ export function mapBackendToHackathon(doc: BackendHackathon): Hackathon {
     registration_start: doc.registration_start,
     registration_end: doc.registration_end,
     registration_open: isRegOpen,
-    min_team_size: doc.min_team_size ?? 1,
-    max_team_size: doc.max_team_size ?? 4,
-    tracks: [],
+    min_team_size: doc.min_team_size,
+    max_team_size: doc.max_team_size,
+    tracks,
   };
-}
-
-export function isVisibleOnHome(doc: BackendHackathon): boolean {
-  if (doc.is_public === false) return false;
-  return doc.status !== "draft" && doc.status !== "archived";
 }

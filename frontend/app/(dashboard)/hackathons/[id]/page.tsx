@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Hackathon, MyTeam, AuthUser } from "@/lib/types";
-import { fetchHackathon } from "@/lib/services/hackathons";
+import { fetchParticipantHackathon } from "@/lib/services/hackathons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type TeamState =
@@ -43,6 +43,7 @@ export default function HackathonOverviewPage() {
 
   const [hackathon, setHackathon] = useState<Hackathon | null>(null);
   const [hackathonLoading, setHackathonLoading] = useState(true);
+  const [hackathonError, setHackathonError] = useState<string | null>(null);
   const [teamState, setTeamState] = useState<TeamState>({ status: "loading" });
   const [me, setMe] = useState<AuthUser | null>(null);
 
@@ -50,51 +51,58 @@ export default function HackathonOverviewPage() {
     let cancelled = false;
 
     async function load() {
-      const [h, teamRes, meRes] = await Promise.all([
-        fetchHackathon(id),
-        fetch(`/api/participants/me/team?hackathon_uuid=${id}`),
-        fetch("/api/auth/me"),
-      ]);
+      try {
+        const [h, teamRes, meRes] = await Promise.all([
+          fetchParticipantHackathon(id),
+          fetch(`/api/participants/me/team?hackathon_uuid=${id}`),
+          fetch("/api/auth/me"),
+        ]);
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (!h) {
-        router.replace("/home");
-        return;
-      }
-      setHackathon(h);
-      setHackathonLoading(false);
-
-      let isUserAdmin = false;
-      if (meRes.ok) {
-        const user = (await meRes.json()) as AuthUser;
-        setMe(user);
-        const role = user.global_role?.name;
-        if (role === "admin" || role === "superadmin") {
-          isUserAdmin = true;
+        if (!h) {
+          router.replace("/home");
+          return;
         }
-      }
+        setHackathon(h);
 
-      if (teamRes.status === 404) {
-        setTeamState({ status: "none" });
-        return;
-      }
+        let isUserAdmin = false;
+        if (meRes.ok) {
+          const user = (await meRes.json()) as AuthUser;
+          setMe(user);
+          const role = user.global_role?.name;
+          if (role === "admin" || role === "superadmin") {
+            isUserAdmin = true;
+          }
+        }
 
-      if (teamRes.ok) {
-        const team = (await teamRes.json()) as MyTeam;
-        setTeamState({ status: "has-team", team });
-      } else {
-        if (isUserAdmin) {
+        if (teamRes.status === 404) {
           setTeamState({ status: "none" });
-        } else {
-          setTeamState({ status: "error" });
+          return;
         }
+
+        if (teamRes.ok) {
+          const team = (await teamRes.json()) as MyTeam;
+          setTeamState({ status: "has-team", team });
+        } else {
+          if (isUserAdmin) {
+            setTeamState({ status: "none" });
+          } else {
+            setTeamState({ status: "error" });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setHackathonError(
+            error instanceof Error ? error.message : "Failed to load this hackathon.",
+          );
+        }
+      } finally {
+        if (!cancelled) setHackathonLoading(false);
       }
     }
 
-    load().catch(() => {
-      if (!cancelled) setTeamState({ status: "error" });
-    });
+    load();
 
     return () => { cancelled = true; };
   }, [id, router]);
@@ -109,13 +117,22 @@ export default function HackathonOverviewPage() {
     );
   }
 
+  if (hackathonError) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-10">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-400">
+          {hackathonError}
+        </div>
+      </div>
+    );
+  }
+
   if (!hackathon) return null;
 
   const isPast =
     hackathon.backend_status === "completed" ||
     hackathon.backend_status === "archived" ||
-    hackathon.status === "ended" ||
-    new Date(hackathon.ends_at).getTime() < Date.now();
+    hackathon.status === "ended";
 
   const isAdmin = me?.global_role?.name === "admin" || me?.global_role?.name === "superadmin";
 
@@ -157,7 +174,7 @@ export default function HackathonOverviewPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               {hackathon.tracks.map((t) => (
                 <span
-                  key={t.track_uuid}
+                  key={t.uuid}
                   className="rounded-full border border-[#4285F4]/20 bg-[#4285F4]/10 px-2.5 py-0.5 text-xs text-[#8ab4f8]"
                 >
                   {t.name}

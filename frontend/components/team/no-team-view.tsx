@@ -16,6 +16,7 @@ type Props = {
 
 export function NoTeamView({ hackathon, onTeamCreated, isPast = false, isAdmin = false }: Props) {
   const [view, setView] = useState<View>("choice");
+  const canCreateTeam = !isPast && !isAdmin && hackathon.tracks.length > 0;
 
   return (
     <div className="flex flex-col items-center justify-center py-16 px-5">
@@ -34,13 +35,15 @@ export function NoTeamView({ hackathon, onTeamCreated, isPast = false, isAdmin =
                   ? "Administrators are excluded from participating in teams."
                   : isPast
                   ? "Team actions are closed."
+                  : hackathon.tracks.length === 0
+                  ? "Team creation is unavailable until this hackathon has an active track."
                   : "Create a new team or join an existing one to get started."}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setView("create")}
-                disabled={isPast || isAdmin}
+                disabled={!canCreateTeam}
                 className="group flex h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-zinc-950 transition hover:border-white/20 hover:bg-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="text-2xl">✨</span>

@@ -6,6 +6,7 @@ interface TimezoneSelectProps {
   label?: string;
   value: string;
   onChange: (timezone: string) => void;
+  error?: string;
 }
 
 const COMMON_TIMEZONES = [
@@ -18,7 +19,7 @@ const COMMON_TIMEZONES = [
   "Asia/Singapore",
 ];
 
-export function TimezoneSelect({ label = "Timezone", value, onChange }: TimezoneSelectProps) {
+export function TimezoneSelect({ label = "Timezone", value, onChange, error }: TimezoneSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [timezones, setTimezones] = useState<string[]>([]);
@@ -78,7 +79,9 @@ export function TimezoneSelect({ label = "Timezone", value, onChange }: Timezone
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`flex w-full items-center justify-between rounded-xl border bg-black/60 px-4 py-3 text-sm text-left transition focus:outline-none ${
-          isOpen
+          error
+            ? "border-red-500/60 focus:border-red-500"
+            : isOpen
             ? "border-[#4285F4] ring-1 ring-[#4285F4]/30"
             : "border-white/10 hover:border-white/20"
         }`}
@@ -98,6 +101,8 @@ export function TimezoneSelect({ label = "Timezone", value, onChange }: Timezone
           />
         </svg>
       </button>
+
+      {error && <p className="mt-1 text-xs font-medium text-red-400">{error}</p>}
 
       {/* Searchable Dropdown */}
       {isOpen && (

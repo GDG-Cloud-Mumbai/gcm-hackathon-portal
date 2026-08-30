@@ -1,42 +1,40 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAccessToken, decodeJwtPayload } from "@/lib/auth";
-import { getHackathons } from "@/lib/services/hackathons";
-import type { Hackathon } from "@/lib/types";
+import { getParticipantHackathons } from "@/lib/services/hackathons";
+import type { ParticipantHackathonSummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type JwtClaims = { email?: string; sub?: string };
 
-function statusLabel(h: Hackathon) {
-  const bStatus = h.backend_status ?? "";
-
-  if (bStatus === "registration_open" || h.registration_open) {
+function statusLabel(status: ParticipantHackathonSummary["status"]) {
+  if (status === "registration_open") {
     return {
       text: "Registration Open",
       className: "bg-[#34A853]/10 text-[#81c784] border border-[#34A853]/20",
     };
   }
-  if (bStatus === "registration_closed") {
+  if (status === "registration_closed") {
     return {
       text: "Registration Closed",
       className: "bg-orange-500/10 text-orange-400 border border-orange-500/20",
     };
   }
-  if (bStatus === "ongoing") {
+  if (status === "ongoing") {
     return {
       text: "Event Live",
       className: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
     };
   }
-  if (bStatus === "judging") {
+  if (status === "judging") {
     return {
       text: "Judging Phase",
       className: "bg-pink-500/10 text-pink-400 border border-pink-500/20",
     };
   }
-  if (bStatus === "completed" || h.status === "ended") {
+  if (status === "completed" || status === "archived") {
     return {
       text: "Ended",
       className: "bg-white/5 text-white/30 border border-white/10",
@@ -48,14 +46,6 @@ function statusLabel(h: Hackathon) {
   };
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 export default async function HomePage() {
   const token = await getAccessToken();
   if (!token) redirect("/auth");
@@ -64,27 +54,7 @@ export default async function HomePage() {
   const email = claims?.email ?? "";
   const displayName = email.split("@")[0];
 
-  const hackathons = await getHackathons();
-
-  const active = hackathons.filter(
-    (h) =>
-      h.registration_open ||
-      h.backend_status === "registration_open" ||
-      h.backend_status === "ongoing" ||
-      h.backend_status === "judging"
-  );
-
-  const upcoming = hackathons.filter(
-    (h) =>
-      !active.includes(h) &&
-      (h.status === "upcoming" ||
-        h.backend_status === "published" ||
-        h.backend_status === "registration_closed")
-  );
-
-  const ended = hackathons.filter(
-    (h) => !active.includes(h) && !upcoming.includes(h)
-  );
+  const { hackathons, error } = await getParticipantHackathons(token);
 
   return (
     <div className="mx-auto max-w-4xl space-y-10 px-6 py-10">
@@ -99,17 +69,16 @@ export default async function HomePage() {
         <p className="mt-1 text-sm text-white/40">{email}</p>
       </section>
 
-      {/* Hackathon listing */}
-      {active.length > 0 && (
-        <HackathonSection title="Live & Active Hackathons" hackathons={active} />
+      {error && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-5 text-sm text-red-400">
+          {error}
+        </div>
       )}
-      {upcoming.length > 0 && (
-        <HackathonSection title="Upcoming Hackathons" hackathons={upcoming} />
+
+      {!error && hackathons.length > 0 && (
+        <HackathonSection title="Available Hackathons" hackathons={hackathons} />
       )}
-      {ended.length > 0 && (
-        <HackathonSection title="Past Hackathons" hackathons={ended} />
-      )}
-      {hackathons.length === 0 && (
+      {!error && hackathons.length === 0 && (
         <div className="rounded-2xl border border-white/[0.06] bg-zinc-950 px-6 py-12 text-center">
           <p className="text-sm text-white/30">No hackathons available right now.</p>
         </div>
@@ -123,7 +92,7 @@ function HackathonSection({
   hackathons,
 }: {
   title: string;
-  hackathons: Hackathon[];
+  hackathons: ParticipantHackathonSummary[];
 }) {
   return (
     <section>
@@ -132,15 +101,15 @@ function HackathonSection({
       </h2>
       <div className="space-y-3">
         {hackathons.map((h) => (
-          <HackathonCard key={h.hackathon_uuid} hackathon={h} />
+          <HackathonCard key={h.uuid} hackathon={h} />
         ))}
       </div>
     </section>
   );
 }
 
-function HackathonCard({ hackathon: h }: { hackathon: Hackathon }) {
-  const badge = statusLabel(h);
+function HackathonCard({ hackathon: h }: { hackathon: ParticipantHackathonSummary }) {
+  const badge = statusLabel(h.status);
 
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-zinc-950 p-5 transition hover:border-white/20">
@@ -156,34 +125,21 @@ function HackathonCard({ hackathon: h }: { hackathon: Hackathon }) {
               {badge.text}
             </span>
           </div>
-          <p className="mt-1 text-sm text-white/50">{h.tagline}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/30">
-            <span>
-              {formatDate(h.starts_at)} — {formatDate(h.ends_at)}
-            </span>
-            <span>
-              Teams of {h.min_team_size}–{h.max_team_size}
-            </span>
-            {h.tracks.length > 0 && (
-              <span>
-                {h.tracks.length} track{h.tracks.length !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
+          <p className="mt-1 text-sm text-white/50">{h.description ?? "No description provided."}</p>
         </div>
 
         <Link
-          href={`/hackathons/${h.hackathon_uuid}`}
+          href={`/hackathons/${h.uuid}`}
           className="shrink-0 self-center rounded-full border border-white/10 px-4 py-2 text-xs font-medium text-white/70 transition hover:border-white/30 hover:text-white"
         >
           Enter →
         </Link>
       </div>
 
-      {!h.registration_open && h.backend_status === "published" && (
+      {h.status === "published" && (
         <p className="mt-3 text-xs text-white/25">Registration opens soon</p>
       )}
-      {!h.registration_open && h.backend_status === "registration_closed" && (
+      {h.status === "registration_closed" && (
         <p className="mt-3 text-xs text-orange-400/60">
           Registration is now closed for this event
         </p>

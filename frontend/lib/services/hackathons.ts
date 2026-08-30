@@ -1,70 +1,109 @@
 import { BACKEND_URL } from "@/lib/constants";
 import {
-  isVisibleOnHome,
-  mapBackendToHackathon,
-  type BackendHackathon,
+  mapParticipantHackathonToHackathon,
 } from "@/lib/hackathon-mapper";
-import type { Hackathon } from "@/lib/types";
+import type {
+  Hackathon,
+  ParticipantHackathonDetail,
+  ParticipantHackathonSummary,
+  Track,
+} from "@/lib/types";
 
-type BackendListResponse = {
-  hackathons: BackendHackathon[];
+type ParticipantHackathonListResponse = {
+  hackathons: ParticipantHackathonSummary[];
 };
 
-async function fetchBackendHackathons(): Promise<Hackathon[]> {
-  if (!BACKEND_URL) {
-    return [];
-  }
+type ParticipantTrackListResponse = {
+  tracks: Track[];
+};
 
-  const res = await fetch(`${BACKEND_URL}/hackathons`, { cache: "no-store" });
-  if (!res.ok) {
-    return [];
-  }
+type ParticipantHackathonListResult = {
+  hackathons: ParticipantHackathonSummary[];
+  error: string | null;
+};
 
-  const data = (await res.json()) as BackendListResponse;
-  return (data.hackathons ?? [])
-    .filter(isVisibleOnHome)
-    .map(mapBackendToHackathon);
+async function getErrorMessage(response: Response, fallback: string) {
+  try {
+    const data = (await response.json()) as {
+      detail?: string;
+      message?: string;
+    };
+    return data.detail ?? data.message ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-async function fetchBackendHackathon(id: string): Promise<Hackathon | null> {
+export async function getParticipantHackathons(
+  accessToken: string,
+): Promise<ParticipantHackathonListResult> {
   if (!BACKEND_URL) {
+    return {
+      hackathons: [],
+      error: "Hackathon service is not configured.",
+    };
+  }
+
+  const res = await fetch(`${BACKEND_URL}/participants/hackathons`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    return {
+      hackathons: [],
+      error: await getErrorMessage(res, "Failed to load available hackathons."),
+    };
+  }
+
+  const data = (await res.json()) as ParticipantHackathonListResponse;
+  return { hackathons: data.hackathons ?? [], error: null };
+}
+
+export async function getParticipantHackathon(
+  id: string,
+  accessToken: string,
+): Promise<Hackathon | null> {
+  if (!BACKEND_URL || !accessToken) {
     return null;
   }
 
-  const res = await fetch(`${BACKEND_URL}/hackathons/${id}`, {
+  const res = await fetch(`${BACKEND_URL}/participants/hackathons/${id}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
   if (!res.ok) {
     return null;
   }
 
-  const doc = (await res.json()) as BackendHackathon;
-  if (doc.status === "archived") {
-    return null;
-  }
-
-  return mapBackendToHackathon(doc);
+  const doc = (await res.json()) as ParticipantHackathonDetail;
+  return mapParticipantHackathonToHackathon(doc, []);
 }
 
-export async function getHackathons(): Promise<Hackathon[]> {
-  return fetchBackendHackathons();
-}
-
-export async function getHackathon(id: string): Promise<Hackathon | null> {
-  return fetchBackendHackathon(id);
-}
-
-/** Client-side fetch via Next.js API route (for use in "use client" components). */
-export async function fetchHackathon(id: string): Promise<Hackathon | null> {
-  const res = await fetch(`/api/hackathons/${id}`);
-  if (!res.ok) {
+/** Client-side detail and track fetch via authenticated Next.js BFF routes. */
+export async function fetchParticipantHackathon(
+  id: string,
+): Promise<Hackathon | null> {
+  const detailResponse = await fetch(`/api/participants/hackathons/${id}`);
+  if (detailResponse.status === 404) {
     return null;
   }
-
-  const doc = (await res.json()) as BackendHackathon;
-  if (doc.status === "archived") {
-    return null;
+  if (!detailResponse.ok) {
+    throw new Error(
+      await getErrorMessage(detailResponse, "Failed to load hackathon details."),
+    );
   }
 
-  return mapBackendToHackathon(doc);
+  const tracksResponse = await fetch(
+    `/api/participants/hackathons/${id}/tracks`,
+  );
+  if (!tracksResponse.ok) {
+    throw new Error(
+      await getErrorMessage(tracksResponse, "Failed to load hackathon tracks."),
+    );
+  }
+
+  const detail = (await detailResponse.json()) as ParticipantHackathonDetail;
+  const tracks = (await tracksResponse.json()) as ParticipantTrackListResponse;
+  return mapParticipantHackathonToHackathon(detail, tracks.tracks ?? []);
 }

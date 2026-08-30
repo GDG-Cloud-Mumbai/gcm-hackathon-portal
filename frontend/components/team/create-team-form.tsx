@@ -13,8 +13,8 @@ const INPUT =
   "h-11 w-full rounded-xl border border-white/10 bg-black px-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#8ab4f8] focus:ring-4 focus:ring-[#8ab4f8]/10";
 
 export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
-  const singleTrack = hackathon.tracks.length <= 1;
-  const defaultTrack = hackathon.tracks.length > 0 ? hackathon.tracks[0].track_uuid : "general";
+  const singleTrack = hackathon.tracks.length === 1;
+  const defaultTrack = hackathon.tracks[0]?.uuid ?? "";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [trackUuid, setTrackUuid] = useState(defaultTrack);
@@ -24,7 +24,7 @@ export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !trackUuid) return;
+    if (!name.trim() || !trackUuid || hackathon.tracks.length === 0) return;
 
     setLoading(true);
     setError("");
@@ -92,7 +92,7 @@ export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
           >
             <option value="" disabled>Select a track…</option>
             {hackathon.tracks.map((t) => (
-              <option key={t.track_uuid} value={t.track_uuid}>
+              <option key={t.uuid} value={t.uuid}>
                 {t.name}
               </option>
             ))}
@@ -101,8 +101,13 @@ export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
       )}
       {singleTrack && (
         <p className="text-xs text-white/30">
-          Track: <span className="text-white/50">{hackathon.tracks[0]?.name ?? "General Track"}</span>
+          Track: <span className="text-white/50">{hackathon.tracks[0]?.name}</span>
         </p>
+      )}
+      {hackathon.tracks.length === 0 && (
+        <div className="rounded-xl border border-[#FBBC04]/15 bg-[#FBBC04]/5 px-4 py-3 text-xs text-[#ffd54f]/70">
+          No active tracks are available for this hackathon. Team creation is unavailable.
+        </div>
       )}
 
       {/* Advanced — collapsible */}
@@ -156,7 +161,7 @@ export function CreateTeamForm({ hackathon, onSuccess, onCancel }: Props) {
         </button>
         <button
           type="submit"
-          disabled={loading || !trackUuid}
+          disabled={loading || !trackUuid || hackathon.tracks.length === 0}
           className="h-11 flex-1 rounded-full bg-white text-sm font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Creating…" : "Create Team"}

@@ -83,9 +83,58 @@ export type RemoveMemberPayload = {
   member_uuid: string;
 };
 
+export type TrackStatus = "active" | "disabled" | "archived";
+
 export type Track = {
-  track_uuid: string;
+  uuid: string;
+  hackathon_uuid: string;
   name: string;
+  description: string;
+  status: TrackStatus;
+};
+
+export type CreateTrackPayload = {
+  name: string;
+  description: string;
+};
+
+export type UpdateTrackPayload = {
+  name?: string;
+  description?: string;
+};
+
+export type HackathonLifecycleStatus =
+  | "draft"
+  | "published"
+  | "registration_open"
+  | "registration_closed"
+  | "ongoing"
+  | "judging"
+  | "completed"
+  | "archived";
+
+export type ParticipantHackathonSummary = {
+  uuid: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  status: HackathonLifecycleStatus;
+};
+
+export type ParticipantHackathonDetail = ParticipantHackathonSummary & {
+  timezone: string;
+  registration_start: string;
+  registration_end: string;
+  event_start: string;
+  event_end: string;
+  submission_start: string;
+  submission_deadline: string;
+  min_team_size: number;
+  max_team_size: number;
+  allow_individual_registration: boolean;
+  is_public: boolean;
 };
 
 export type HackathonStatus = "upcoming" | "active" | "ended";

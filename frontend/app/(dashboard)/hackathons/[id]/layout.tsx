@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getHackathon } from "@/lib/services/hackathons";
+import { getAccessToken } from "@/lib/auth";
+import { getParticipantHackathon } from "@/lib/services/hackathons";
 import { CountdownTimer } from "@/components/hackathon/countdown-timer";
 import { HackathonNavLink } from "@/components/hackathon/hackathon-nav-link";
 
@@ -15,7 +16,8 @@ const NAV_ITEMS = [
 
 export default async function HackathonLayout({ children, params }: Props) {
   const { id } = await params;
-  const hackathon = await getHackathon(id);
+  const token = await getAccessToken();
+  const hackathon = token ? await getParticipantHackathon(id, token) : null;
   if (!hackathon) notFound();
 
   const base = `/hackathons/${id}`;

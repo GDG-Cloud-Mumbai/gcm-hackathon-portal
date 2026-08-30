@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { Track } from "@/lib/types";
 
 interface HackathonItem {
   uuid: string;
@@ -15,6 +16,12 @@ interface HackathonItem {
   event_end: string;
   is_public: boolean;
 }
+
+type TrackListResponse = {
+  tracks?: Track[];
+};
+
+type PublishTrackState = "checking" | "ready" | "missing" | "unavailable";
 
 const statusColors: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
@@ -33,8 +40,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [publishTrackState, setPublishTrackState] = useState<Record<string, PublishTrackState>>({});
 
-  async function fetchHackathons() {
+  const fetchHackathons = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -47,7 +55,34 @@ export default function AdminPage() {
         throw new Error(errData.detail || errData.message || "Failed to load hackathons");
       }
       const data = await res.json();
-      setHackathons(data.hackathons || []);
+      const nextHackathons = (data.hackathons || []) as HackathonItem[];
+      const draftHackathons = nextHackathons.filter((item) => item.status === "draft");
+
+      setHackathons(nextHackathons);
+      setPublishTrackState(Object.fromEntries(
+        draftHackathons.map((item) => [item.uuid, "checking"]),
+      ));
+
+      const trackChecks = await Promise.all(draftHackathons.map(async (item) => {
+        try {
+          const trackResponse = await fetch(`/api/admin/hackathons/${item.uuid}/tracks`, {
+            cache: "no-store",
+          });
+          if (!trackResponse.ok) {
+            return [item.uuid, "unavailable"] as const;
+          }
+
+          const trackData = (await trackResponse.json()) as TrackListResponse;
+          const hasActiveTrack = (trackData.tracks ?? []).some(
+            (track) => track.status === "active",
+          );
+          return [item.uuid, hasActiveTrack ? "ready" : "missing"] as const;
+        } catch {
+          return [item.uuid, "unavailable"] as const;
+        }
+      }));
+
+      setPublishTrackState(Object.fromEntries(trackChecks));
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -57,13 +92,29 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchHackathons();
   }, []);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void fetchHackathons();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchHackathons]);
+
   async function handleAction(uuid: string, action: string) {
+    if (action === "publish") {
+      const trackState = publishTrackState[uuid];
+      if (trackState !== "ready") {
+        setError(
+          trackState === "missing"
+            ? "Add at least one active track before publishing this hackathon."
+            : "Track availability could not be verified. Refresh and try again.",
+        );
+        return;
+      }
+    }
+
     setActionLoading(`${uuid}-${action}`);
     try {
       const res = await fetch(`/api/admin/hackathons/${uuid}/${action}`, {
@@ -155,13 +206,28 @@ export default function AdminPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/admin/hackathons/${item.uuid}/tracks`}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10"
+                  >
+                    Manage Tracks
+                  </Link>
                   {item.status === "draft" && (
                     <button
                       onClick={() => handleAction(item.uuid, "publish")}
-                      disabled={actionLoading === `${item.uuid}-publish`}
-                      className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+                      disabled={
+                        actionLoading === `${item.uuid}-publish` ||
+                        publishTrackState[item.uuid] !== "ready"
+                      }
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Publish
+                      {publishTrackState[item.uuid] === "checking"
+                        ? "Checking Tracks…"
+                        : publishTrackState[item.uuid] === "missing"
+                          ? "Add Track First"
+                          : publishTrackState[item.uuid] === "unavailable"
+                            ? "Track Check Failed"
+                            : "Publish"}
                     </button>
                   )}
 
@@ -248,6 +314,16 @@ export default function AdminPage() {
                   {new Date(item.event_end).toLocaleDateString()}
                 </div>
               </div>
+              {item.status === "draft" && publishTrackState[item.uuid] === "missing" && (
+                <p className="mt-4 text-xs text-[#ffd54f]">
+                  Add at least one active track before publishing this hackathon.
+                </p>
+              )}
+              {item.status === "draft" && publishTrackState[item.uuid] === "unavailable" && (
+                <p className="mt-4 text-xs text-red-400">
+                  Track availability could not be verified. Publish remains unavailable until it can be checked.
+                </p>
+              )}
             </div>
           ))}
         </div>

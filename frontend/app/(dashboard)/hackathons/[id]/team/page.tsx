@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import type { AuthUser, Hackathon, MyTeam, TeamResponse } from "@/lib/types";
-import { fetchHackathon } from "@/lib/services/hackathons";
+import type { AuthUser, Hackathon, MyTeam } from "@/lib/types";
+import { fetchParticipantHackathon } from "@/lib/services/hackathons";
 import { NoTeamView } from "@/components/team/no-team-view";
 import { TeamOverview } from "@/components/team/team-overview";
 import { MembersList } from "@/components/team/members-list";
@@ -12,7 +12,7 @@ import { InvitationsPanel } from "@/components/team/invitations-panel";
 import { InviteSearch } from "@/components/team/invite-search";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type PageState = "loading" | "no-team" | "has-team";
+type PageState = "loading" | "no-team" | "has-team" | "error";
 
 export default function HackathonTeamPage() {
   const params = useParams<{ id: string }>();
@@ -22,15 +22,21 @@ export default function HackathonTeamPage() {
   const [hackathon, setHackathon] = useState<Hackathon | null>(null);
   const [team, setTeam] = useState<MyTeam | null>(null);
   const [me, setMe] = useState<AuthUser | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    setState("loading");
     try {
       const [h, teamRes, meRes] = await Promise.all([
-        fetchHackathon(hackathonId),
+        fetchParticipantHackathon(hackathonId),
         fetch(`/api/participants/me/team?hackathon_uuid=${hackathonId}`),
         fetch("/api/auth/me"),
       ]);
+
+      if (!h) {
+        setLoadError("This hackathon is no longer available.");
+        setState("error");
+        return;
+      }
 
       setHackathon(h);
 
@@ -50,24 +56,30 @@ export default function HackathonTeamPage() {
       } else {
         setState("no-team");
       }
-    } catch {
-      setState("no-team");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Failed to load hackathon tracks.",
+      );
+      setState("error");
     }
   }, [hackathonId]);
 
   useEffect(() => {
-    loadData();
+    const timeoutId = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [loadData]);
 
-  function handleTeamCreated(_team: TeamResponse) {
+  function handleTeamCreated() {
     loadData();
   }
 
   const isPast =
     hackathon?.backend_status === "completed" ||
     hackathon?.backend_status === "archived" ||
-    hackathon?.status === "ended" ||
-    (hackathon?.ends_at ? new Date(hackathon.ends_at).getTime() < Date.now() : false);
+    hackathon?.status === "ended";
 
   const isAdmin = me?.global_role?.name === "admin" || me?.global_role?.name === "superadmin";
 
@@ -77,6 +89,22 @@ export default function HackathonTeamPage() {
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-52 w-full" />
+      </div>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 px-6 py-10">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-400">
+          {loadError ?? "Failed to load this hackathon."}
+        </div>
+        <button
+          onClick={loadData}
+          className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/70 transition hover:border-white/30 hover:text-white"
+        >
+          Try again
+        </button>
       </div>
     );
   }
